@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Performance</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@300;400;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page">
+      <header class="site-header site-header--simple">
+        <div>
+          <h1 class="site-title">Performance</h1>
+          <p class="site-subtitle">持仓数据与历史业绩</p>
+        </div>
+        <span class="banner-date" id="bannerDate">数据更新：--</span>
+      </header>
+
+      <main class="workspace">
+        <div class="chart-groups">
+          <div class="builtin-charts" id="builtinCharts"></div>
+
+          <section class="chart-group" id="uploadGroup">
+            <div class="group-header">
+              <h2>本地 CSV 调试</h2>
+              <p>上传 CSV 生成可交互曲线图。</p>
+            </div>
+
+            <div class="data-source">
+              <div class="data-source__info">
+                <h3>数据源</h3>
+                <p id="dataSourceNote"></p>
+              </div>
+              <div class="data-source__control">
+                <div class="data-source__actions">
+                  <label class="upload upload--primary">
+                    <input id="fileInput" type="file" accept=".csv" />
+                    <span>上传 CSV</span>
+                  </label>
+                </div>
+                <div class="data-source__status">
+                  <span class="status-label">曲线数</span>
+                  <span id="seriesCount">0 条曲线</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="group-content" id="uploadGroupContent">
+              <div class="settings-grid">
+                <section class="panel settings-panel">
+                  <div class="settings-head">
+                    <h3>Y 轴范围</h3>
+                    <p>支持按数据分组后为每个 Y 轴设置最小/最大值。</p>
+                  </div>
+                  <div class="axis-summary" id="axisSummary">
+                    <span>暂无数据</span>
+                  </div>
+                </section>
+                <section class="panel settings-panel">
+                  <div class="settings-head">
+                    <h3>曲线样式</h3>
+                    <p>为每条曲线指定类型，并设置显示当前值。</p>
+                  </div>
+                  <div class="series-controls" id="seriesControls"></div>
+                </section>
+              </div>
+
+              <section class="panel chart-panel" id="uploadChartPanel">
+                <div class="panel__header">
+                  <div>
+                    <p>支持多列数据自动绘制，自动生成多个 Y 轴。</p>
+                  </div>
+                  <div class="chart-actions">
+                    <button class="button button--flat" id="downloadChart" type="button">下载曲线图</button>
+                    <div class="legend" id="legend"></div>
+                  </div>
+                </div>
+                <div class="chart-wrap">
+                  <svg id="chart" viewBox="0 0 1100 540" role="img" aria-label="数据曲线图"></svg>
+                  <div class="range-slider is-hidden" id="rangeSlider">
+                    <div class="range-track" id="rangeTrack">
+                      <div class="range-selection" id="rangeSelection">
+                        <div class="range-handle" data-handle="left" aria-label="左侧滑块"></div>
+                        <div class="range-handle" data-handle="right" aria-label="右侧滑块"></div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            </div>
+          </section>
+        </div>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
