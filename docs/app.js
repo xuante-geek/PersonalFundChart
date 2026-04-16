@@ -35,19 +35,40 @@ const remoteCsvBaseUrl = "https://personalfund-data-1399092305.cos.ap-guangzhou.
 const DAILY_UPDATE_FILE = "output/daily_data.csv";
 const REMOTE_CHART_SOURCES = [
   {
-    label: "基金净值与指数走势",
+    label: "历史净值",
     note: "数据源：nav_history.csv",
     file: "output/nav_history.csv",
+    axisAutoExact: true,
+    valueFormat: "number",
+    seriesDefinitions: [
+      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true },
+      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true },
+      { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false },
+      { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false },
+      { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false },
+      { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false },
+      { name: "纳斯达克指数", candidates: ["纳斯达克指数", "纳斯达克指数除首", "纳斯达克指数点位"], defaultVisible: false },
+    ],
   },
   {
-    label: "组合收益率",
+    label: "综合收益率",
     note: "数据源：return_history.csv",
     file: "output/return_history.csv",
+    axisAutoExact: true,
+    valueFormat: "percent",
+    seriesDefinitions: [
+      { name: "收益率", candidates: ["收益率"], defaultVisible: true },
+    ],
   },
   {
-    label: "组合 XIRR",
+    label: "综合XIRR收益率",
     note: "数据源：xirr_history.csv",
     file: "output/xirr_history.csv",
+    axisAutoExact: true,
+    valueFormat: "percent",
+    seriesDefinitions: [
+      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true },
+    ],
   },
 ];
 const Y_SCALE_MODE_LINEAR = "linear";
@@ -554,6 +575,8 @@ function createChartInstance(options) {
     yScaleMode: normalizeYScaleMode(options.yScaleMode),
     yScaleMin: normalizeFiniteNumber(options.yScaleMin),
     yScaleMax: normalizeFiniteNumber(options.yScaleMax),
+    axisAutoExact: Boolean(options.axisAutoExact),
+    valueFormat: options.valueFormat === "percent" ? "percent" : "number",
   };
   attachInstanceEvents(instance);
   return instance;
@@ -858,6 +881,54 @@ function getSourceNote(source) {
   return "表格使用注释说明";
 }
 
+function computeSeriesStats(values) {
+  const numericValues = values.filter((value) => value !== null && !Number.isNaN(value));
+  if (!numericValues.length) {
+    return { min: 0, max: 0, maxAbs: 0 };
+  }
+  const min = Math.min(...numericValues);
+  const max = Math.max(...numericValues);
+  const maxAbs = Math.max(...numericValues.map((value) => Math.abs(value)));
+  return { min, max, maxAbs };
+}
+
+function applySourceSeriesDefinitions(dataset, source) {
+  const definitions = Array.isArray(source?.seriesDefinitions) ? source.seriesDefinitions : [];
+  if (!definitions.length || !dataset || !Array.isArray(dataset.series)) {
+    return dataset;
+  }
+
+  const selectedSeries = [];
+  definitions.forEach((definition) => {
+    const candidates = Array.isArray(definition.candidates) ? definition.candidates : [];
+    const matched = candidates
+      .map((candidate) => dataset.series.find((series) => series.name === candidate))
+      .find(Boolean);
+    if (!matched) {
+      return;
+    }
+    const index = selectedSeries.length;
+    const stats = computeSeriesStats(matched.values);
+    selectedSeries.push({
+      ...matched,
+      ...stats,
+      id: `series-${index + 1}`,
+      index,
+      name: definition.name || matched.name,
+      defaultVisible: definition.defaultVisible !== false,
+    });
+  });
+
+  if (!selectedSeries.length) {
+    return dataset;
+  }
+
+  return {
+    ...dataset,
+    series: selectedSeries,
+  };
+}
+
 function createBuiltinGroup(title, note, infoImage) {
   const group = document.createElement("section");
   group.className = "chart-group";
@@ -1016,6 +1087,8 @@ async function loadBuiltInCharts() {
       yScaleMode: source.yScaleMode || source.yScale,
       yScaleMin: source.yScaleMin ?? source.minY,
       yScaleMax: source.yScaleMax ?? source.maxY,
+      axisAutoExact: source.axisAutoExact,
+      valueFormat: source.valueFormat,
       chart: groupParts.chart,
       legend: groupParts.legend,
       axisSummary: groupParts.axisSummary,
@@ -1063,8 +1136,18 @@ async function loadBuiltInCharts() {
         );
         continue;
       }
+      const sourceDataset = applySourceSeriesDefinitions(dataset, source);
+      if (!sourceDataset.series.length) {
+        setBuiltinPanelError(
+          groupParts.panel,
+          "未匹配到预设曲线列，请检查 CSV 表头。",
+          groupParts.axisSummary,
+          groupParts.seriesControls
+        );
+        continue;
+      }
       withInstance(instance, () => {
-        applyDataset(dataset);
+        applyDataset(sourceDataset);
       });
     } catch (error) {
       setBuiltinPanelError(
@@ -1088,7 +1171,8 @@ function applyDataset(dataset) {
   axisOverrides.clear();
   axisForcedSeries.clear();
   dataset.series.forEach((series) => {
-    visibility.set(series.id, true);
+    const defaultVisible = series.defaultVisible !== false;
+    visibility.set(series.id, defaultVisible);
     getSeriesStyle(series);
   });
 
@@ -1345,6 +1429,20 @@ function getGroupKey(group) {
 }
 
 function applyAxisOverrides(groups) {
+  if (activeInstance && activeInstance.axisAutoExact) {
+    groups.forEach((group) => {
+      const key = getGroupKey(group);
+      group.key = key;
+      axisOverrides.delete(key);
+      if (!(group.max > group.min)) {
+        const padding = Math.max(Math.abs(group.max || 0) * 0.01, 1e-6);
+        group.min -= padding;
+        group.max += padding;
+      }
+    });
+    return;
+  }
+
   groups.forEach((group) => {
     const key = getGroupKey(group);
     group.key = key;
@@ -1439,11 +1537,13 @@ function refreshChart() {
     (series) => visibility.get(series.id) !== false
   );
 
-  const rangeDataset = buildRangeDataset(currentDataset, currentRange, currentDataset.series);
+  const rangeDataset = buildRangeDataset(currentDataset, currentRange, visibleSeries);
   const hasData = rangeDataset.series.some((series) => series.hasData);
   if (!hasData) {
     chart.innerHTML = "";
-    axisSummary.innerHTML = "<span>当前区间内暂无可绘制数据。</span>";
+    if (axisSummary) {
+      axisSummary.innerHTML = "<span>当前区间内暂无可绘制数据。</span>";
+    }
     hoverState = null;
     return;
   }
@@ -2107,7 +2207,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
         y: y + 4,
         "text-anchor": align,
       });
-      text.textContent = formatNumber(tick);
+      text.textContent = formatMetricValue(tick);
       svg.appendChild(text);
     });
 
@@ -2116,8 +2216,13 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
       y: top - 12,
       "text-anchor": align,
     });
+    const isPercentAxis = activeInstance && activeInstance.valueFormat === "percent";
     label.textContent =
-      scale && scale.mode === Y_SCALE_MODE_LOG ? `Y 轴 ${index + 1}（对数）` : `Y 轴 ${index + 1}`;
+      scale && scale.mode === Y_SCALE_MODE_LOG
+        ? `Y 轴 ${index + 1}（对数）`
+        : isPercentAxis
+          ? `Y 轴 ${index + 1}（%）`
+          : `Y 轴 ${index + 1}`;
     svg.appendChild(label);
   });
 }
@@ -2391,6 +2496,22 @@ function formatNumber(value) {
   return formatter.format(rounded);
 }
 
+function formatMetricValue(value) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  if (activeInstance && activeInstance.valueFormat === "percent") {
+    const percent = value * 100;
+    const rounded = Math.round(percent * 100) / 100;
+    const formatter = new Intl.NumberFormat("zh-CN", {
+      minimumFractionDigits: rounded % 1 === 0 ? 0 : 2,
+      maximumFractionDigits: 2,
+    });
+    return `${formatter.format(rounded)}%`;
+  }
+  return formatNumber(value);
+}
+
 function clamp(value, min, max) {
   return Math.min(Math.max(value, min), max);
 }
@@ -2433,7 +2554,7 @@ function drawCurrentValue(series, group, xValues, numericX, xScale, yScale, boun
   });
   chart.appendChild(dot);
 
-  const label = formatNumber(last.value) || String(last.value);
+  const label = formatMetricValue(last.value) || String(last.value);
   drawValueBubble(x, y, label, color, bounds);
 }
 
