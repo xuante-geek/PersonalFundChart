@@ -55,9 +55,17 @@ const REMOTE_CHART_SOURCES = [
     note: "数据源：return_history.csv",
     file: "output/return_history.csv",
     axisAutoExact: true,
-    valueFormat: "percent",
+    valueFormat: "mixed",
+    axisRoundRules: [
+      {
+        seriesNames: ["总市值", "总成本"],
+        step: 10000,
+      },
+    ],
     seriesDefinitions: [
-      { name: "收益率", candidates: ["收益率"], defaultVisible: true },
+      { name: "总市值", candidates: ["总市值"], defaultVisible: true, valueFormat: "number" },
+      { name: "总成本", candidates: ["总成本"], defaultVisible: true, valueFormat: "number" },
+      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent" },
     ],
   },
   {
@@ -576,7 +584,13 @@ function createChartInstance(options) {
     yScaleMin: normalizeFiniteNumber(options.yScaleMin),
     yScaleMax: normalizeFiniteNumber(options.yScaleMax),
     axisAutoExact: Boolean(options.axisAutoExact),
-    valueFormat: options.valueFormat === "percent" ? "percent" : "number",
+    valueFormat:
+      options.valueFormat === "percent"
+        ? "percent"
+        : options.valueFormat === "mixed"
+          ? "mixed"
+          : "number",
+    axisRoundRules: Array.isArray(options.axisRoundRules) ? options.axisRoundRules : [],
   };
   attachInstanceEvents(instance);
   return instance;
@@ -916,6 +930,7 @@ function applySourceSeriesDefinitions(dataset, source) {
       index,
       name: definition.name || matched.name,
       defaultVisible: definition.defaultVisible !== false,
+      valueFormat: definition.valueFormat === "percent" ? "percent" : "number",
     });
   });
 
@@ -1089,6 +1104,7 @@ async function loadBuiltInCharts() {
       yScaleMax: source.yScaleMax ?? source.maxY,
       axisAutoExact: source.axisAutoExact,
       valueFormat: source.valueFormat,
+      axisRoundRules: source.axisRoundRules,
       chart: groupParts.chart,
       legend: groupParts.legend,
       axisSummary: groupParts.axisSummary,
@@ -1428,14 +1444,48 @@ function getGroupKey(group) {
     .join("|");
 }
 
+function resolveGroupRoundStep(group) {
+  const rules = Array.isArray(activeInstance?.axisRoundRules) ? activeInstance.axisRoundRules : [];
+  if (!rules.length || !group || !Array.isArray(group.series) || !group.series.length) {
+    return null;
+  }
+  for (const rule of rules) {
+    const names = Array.isArray(rule.seriesNames) ? rule.seriesNames : [];
+    const step = Number(rule.step);
+    if (!names.length || !Number.isFinite(step) || step <= 0) {
+      continue;
+    }
+    const nameSet = new Set(names);
+    const allInRule = group.series.every((series) => nameSet.has(series.name));
+    const atLeastOne = group.series.some((series) => nameSet.has(series.name));
+    if (allInRule && atLeastOne) {
+      return step;
+    }
+  }
+  return null;
+}
+
+function getGroupValueFormat(group) {
+  if (!group || !Array.isArray(group.series) || !group.series.length) {
+    return activeInstance?.valueFormat === "percent" ? "percent" : "number";
+  }
+  const allPercent = group.series.every((series) => series.valueFormat === "percent");
+  return allPercent ? "percent" : "number";
+}
+
 function applyAxisOverrides(groups) {
   if (activeInstance && activeInstance.axisAutoExact) {
     groups.forEach((group) => {
       const key = getGroupKey(group);
       group.key = key;
       axisOverrides.delete(key);
+      const roundStep = resolveGroupRoundStep(group);
+      if (roundStep) {
+        group.min = Math.floor(group.min / roundStep) * roundStep;
+        group.max = Math.ceil(group.max / roundStep) * roundStep;
+      }
       if (!(group.max > group.min)) {
-        const padding = Math.max(Math.abs(group.max || 0) * 0.01, 1e-6);
+        const padding = roundStep || Math.max(Math.abs(group.max || 0) * 0.01, 1e-6);
         group.min -= padding;
         group.max += padding;
       }
@@ -2197,6 +2247,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
 
     const scale = groupScaleMap ? groupScaleMap.get(group) : resolveGroupScale(group, false);
     const ticks = createYAxisTicks(scale, tickCount);
+    const groupValueFormat = getGroupValueFormat(group);
     ticks.forEach((tick) => {
       const y = mapYValue(tick, scale, top, height);
       if (!Number.isFinite(y)) {
@@ -2207,7 +2258,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
         y: y + 4,
         "text-anchor": align,
       });
-      text.textContent = formatMetricValue(tick);
+      text.textContent = formatMetricValue(tick, groupValueFormat);
       svg.appendChild(text);
     });
 
@@ -2216,7 +2267,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
       y: top - 12,
       "text-anchor": align,
     });
-    const isPercentAxis = activeInstance && activeInstance.valueFormat === "percent";
+    const isPercentAxis = groupValueFormat === "percent";
     label.textContent =
       scale && scale.mode === Y_SCALE_MODE_LOG
         ? `Y 轴 ${index + 1}（对数）`
@@ -2496,11 +2547,12 @@ function formatNumber(value) {
   return formatter.format(rounded);
 }
 
-function formatMetricValue(value) {
+function formatMetricValue(value, valueFormat) {
   if (!Number.isFinite(value)) {
     return "";
   }
-  if (activeInstance && activeInstance.valueFormat === "percent") {
+  const format = valueFormat || (activeInstance && activeInstance.valueFormat === "percent" ? "percent" : "number");
+  if (format === "percent") {
     const percent = value * 100;
     const rounded = Math.round(percent * 100) / 100;
     const formatter = new Intl.NumberFormat("zh-CN", {
@@ -2554,7 +2606,7 @@ function drawCurrentValue(series, group, xValues, numericX, xScale, yScale, boun
   });
   chart.appendChild(dot);
 
-  const label = formatMetricValue(last.value) || String(last.value);
+  const label = formatMetricValue(last.value, series.valueFormat) || String(last.value);
   drawValueBubble(x, y, label, color, bounds);
 }
 
