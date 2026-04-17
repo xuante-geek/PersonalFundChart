@@ -41,8 +41,8 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "number",
     seriesDefinitions: [
-      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#74b9ff", type: "line" } },
-      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#f19066", type: "line" } },
+      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#f19066", type: "line" } },
+      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#74b9ff", type: "line" } },
       { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#d63031", type: "line" } },
       { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false, style: { color: "#00b894", type: "line" } },
       { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false, style: { color: "#a29bfe", type: "line" } },
@@ -71,7 +71,7 @@ const REMOTE_CHART_SOURCES = [
         derive: { type: "subtract", left: "总市值", right: "总成本" },
         style: { color: "#636e72", type: "area" },
       },
-      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
+      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#f19066", type: "line" } },
     ],
   },
   {
@@ -81,7 +81,7 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "percent",
     seriesDefinitions: [
-      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
+      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#f19066", type: "line" } },
     ],
   },
 ];
@@ -148,14 +148,16 @@ if (fileInput) {
     reader.onload = (loadEvent) => {
       const text = String(loadEvent.target.result || "");
       if (uploadInstance) {
-        setUploadGroupVisible(true);
         requestAnimationFrame(() => {
           withInstance(uploadInstance, () => {
             const ok = handleCSV(text);
             if (ok) {
               setDataSourceNote("当前数据源：本地上传 CSV。");
+              setUploadGroupVisible(true);
+              updateSliderPadding();
+              return;
             }
-            updateSliderPadding();
+            setUploadGroupVisible(false);
           });
         });
       } else {
@@ -3102,7 +3104,7 @@ window.addEventListener("resize", () => {
 withInstance(uploadInstance, () => {
   renderEmpty("请上传 CSV 以调试曲线图。");
 });
-setUploadGroupVisible(true);
+setUploadGroupVisible(false);
 loadBuiltInCharts().catch(() => {
   setDataSourceNote("远程 CSV 自动加载失败，可继续上传 CSV。");
 });
