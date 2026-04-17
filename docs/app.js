@@ -41,13 +41,13 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "number",
     seriesDefinitions: [
-      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true },
-      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true },
-      { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false },
-      { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false },
-      { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false },
-      { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false },
-      { name: "纳斯达克指数", candidates: ["纳斯达克指数", "纳斯达克指数除首", "纳斯达克指数点位"], defaultVisible: false },
+      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#74b9ff", type: "line" } },
+      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#f19066", type: "line" } },
+      { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#d63031", type: "line" } },
+      { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false, style: { color: "#00b894", type: "line" } },
+      { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false, style: { color: "#a29bfe", type: "line" } },
+      { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false, style: { color: "#2d3436", type: "line" } },
+      { name: "纳斯达克指数", candidates: ["纳斯达克指数", "纳斯达克指数除首", "纳斯达克指数点位"], defaultVisible: false, style: { color: "#fdcb6e", type: "line" } },
     ],
   },
   {
@@ -58,14 +58,20 @@ const REMOTE_CHART_SOURCES = [
     valueFormat: "mixed",
     axisRoundRules: [
       {
-        seriesNames: ["总市值", "总成本"],
+        seriesNames: ["总收益"],
         step: 10000,
       },
     ],
     seriesDefinitions: [
-      { name: "总市值", candidates: ["总市值"], defaultVisible: true, valueFormat: "number" },
-      { name: "总成本", candidates: ["总成本"], defaultVisible: true, valueFormat: "number" },
-      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent" },
+      {
+        name: "总收益",
+        candidates: ["总收益"],
+        defaultVisible: true,
+        valueFormat: "number",
+        derive: { type: "subtract", left: "总市值", right: "总成本" },
+        style: { color: "#636e72", type: "area" },
+      },
+      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
     ],
   },
   {
@@ -75,7 +81,7 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "percent",
     seriesDefinitions: [
-      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true },
+      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
     ],
   },
 ];
@@ -915,9 +921,34 @@ function applySourceSeriesDefinitions(dataset, source) {
   const selectedSeries = [];
   definitions.forEach((definition) => {
     const candidates = Array.isArray(definition.candidates) ? definition.candidates : [];
-    const matched = candidates
+    let matched = candidates
       .map((candidate) => dataset.series.find((series) => series.name === candidate))
       .find(Boolean);
+    if (!matched && definition.derive && definition.derive.type === "subtract") {
+      const leftSeries = dataset.series.find((series) => series.name === definition.derive.left);
+      const rightSeries = dataset.series.find((series) => series.name === definition.derive.right);
+      if (leftSeries && rightSeries) {
+        const length = Math.max(leftSeries.values.length, rightSeries.values.length);
+        const values = Array.from({ length }, (_, idx) => {
+          const leftValue = leftSeries.values[idx];
+          const rightValue = rightSeries.values[idx];
+          if (
+            leftValue === null ||
+            rightValue === null ||
+            Number.isNaN(leftValue) ||
+            Number.isNaN(rightValue)
+          ) {
+            return null;
+          }
+          return leftValue - rightValue;
+        });
+        matched = {
+          ...leftSeries,
+          name: definition.name || "总收益",
+          values,
+        };
+      }
+    }
     if (!matched) {
       return;
     }
@@ -931,6 +962,7 @@ function applySourceSeriesDefinitions(dataset, source) {
       name: definition.name || matched.name,
       defaultVisible: definition.defaultVisible !== false,
       valueFormat: definition.valueFormat === "percent" ? "percent" : "number",
+      initialStyle: definition.style && typeof definition.style === "object" ? { ...definition.style } : null,
     });
   });
 
@@ -1913,13 +1945,16 @@ function getSeriesStyle(series) {
   const key = series.id;
   if (!map.has(key)) {
     const preset = seriesDefaultConfig.get(name);
+    const initialStyle = series?.initialStyle && typeof series.initialStyle === "object"
+      ? series.initialStyle
+      : null;
     const index = series.index;
     map.set(key, {
-      type: preset ? preset.type : "line",
+      type: initialStyle?.type || (preset ? preset.type : "line"),
       showCurrent: false,
-      color: preset
+      color: initialStyle?.color || (preset
         ? (preset.color || colorOptions[preset.colorIndex])
-        : colorOptions[index % colorOptions.length],
+        : colorOptions[index % colorOptions.length]),
     });
   }
   return map.get(key);
