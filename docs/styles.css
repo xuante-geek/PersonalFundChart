@@ -132,7 +132,7 @@ body {
 .allocation-pie-label {
   position: absolute;
   transform: translate(-50%, -50%);
-  font-size: 0.72rem;
+  font-size: 0.9rem;
   font-weight: 700;
   line-height: 1;
   color: #ffffff;
