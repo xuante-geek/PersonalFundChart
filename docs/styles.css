@@ -129,6 +129,25 @@ body {
   overflow: hidden;
 }
 
+.allocation-pie-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  z-index: 1;
+}
+
+.allocation-pie-hole {
+  position: absolute;
+  width: 100px;
+  height: 100px;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: #f7f8fb;
+  z-index: 2;
+}
+
 .allocation-pie-label {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -139,6 +158,7 @@ body {
   white-space: nowrap;
   pointer-events: none;
   user-select: none;
+  z-index: 3;
 }
 
 .allocation-legend {

@@ -1071,8 +1071,8 @@ function renderAssetAllocationPie(items) {
       if (item.ratio >= MIN_LABEL_RATIO) {
         const midRatio = (startRatio + endRatio) / 2;
         const theta = midRatio * Math.PI * 2 - Math.PI / 2;
-        const labelX = 50 + Math.cos(theta) * 29;
-        const labelY = 50 + Math.sin(theta) * 29;
+        const labelX = 50 + Math.cos(theta) * 37.5;
+        const labelY = 50 + Math.sin(theta) * 37.5;
         pieLabelHtml.push(
           `<span class="allocation-pie-label" style="left:${labelX.toFixed(2)}%;top:${labelY.toFixed(2)}%;">${escapeHtml(item.name)}</span>`
         );
@@ -1085,8 +1085,9 @@ function renderAssetAllocationPie(items) {
     })
     .join("");
 
-  allocationPie.style.background = `conic-gradient(${gradientParts.join(", ")})`;
-  allocationPie.innerHTML = pieLabelHtml.join("");
+  const ringHtml = `<span class="allocation-pie-ring" style="background:conic-gradient(${gradientParts.join(", ")});"></span><span class="allocation-pie-hole" aria-hidden="true"></span>`;
+  allocationPie.style.background = "#eef1f6";
+  allocationPie.innerHTML = `${ringHtml}${pieLabelHtml.join("")}`;
   allocationLegend.innerHTML = legendHtml;
   setPanoramaAllocationVisibility(true);
 }
