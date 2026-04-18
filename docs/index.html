@@ -22,6 +22,22 @@
         <span class="banner-date" id="bannerDate">数据更新：--</span>
       </header>
 
+      <section class="panorama" id="panorama">
+        <article class="panorama-card panorama-total">
+          <p class="panorama-value" id="totalAssetValue">总市值：--</p>
+          <p class="panorama-subvalue" id="totalCostValue">总成本：--</p>
+          <p class="panorama-subvalue" id="totalProfitValue">总收益：--</p>
+        </article>
+        <article class="panorama-card panorama-allocation">
+          <h2>大类资产配置比例</h2>
+          <div class="allocation-wrap" id="allocationWrap">
+            <div class="allocation-pie" id="allocationPie" aria-label="资产配置饼图"></div>
+            <div class="allocation-legend" id="allocationLegend"></div>
+          </div>
+          <p class="allocation-empty" id="allocationEmpty">暂无有效配置比例数据</p>
+        </article>
+      </section>
+
       <main class="workspace">
         <div class="chart-groups">
           <div class="builtin-charts" id="builtinCharts"></div>

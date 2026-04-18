@@ -12,6 +12,13 @@ let rangeSelection = document.getElementById("rangeSelection");
 const downloadChartBtn = document.getElementById("downloadChart");
 const builtinCharts = document.getElementById("builtinCharts");
 const uploadGroupContent = document.getElementById("uploadGroupContent");
+const totalAssetValue = document.getElementById("totalAssetValue");
+const totalCostValue = document.getElementById("totalCostValue");
+const totalProfitValue = document.getElementById("totalProfitValue");
+const allocationWrap = document.getElementById("allocationWrap");
+const allocationPie = document.getElementById("allocationPie");
+const allocationLegend = document.getElementById("allocationLegend");
+const allocationEmpty = document.getElementById("allocationEmpty");
 let infoModal = document.getElementById("infoModal");
 let infoModalImage = document.getElementById("infoModalImage");
 let infoModalLoading = document.querySelector(".info-modal__loading");
@@ -33,6 +40,32 @@ let dropdownListenerAttached = false;
 let dataSources = [];
 const remoteCsvBaseUrl = "https://personalfund-data-1399092305.cos.ap-guangzhou.myqcloud.com/data";
 const DAILY_UPDATE_FILE = "output/daily_data.csv";
+const CONFIGURATION_RATIO_FILE = "output/configuration_ratio.csv";
+const NAV_HISTORY_FILE = "output/nav_history.csv";
+const RETURN_HISTORY_FILE = "output/return_history.csv";
+const PIE_COLORS = [
+  "#00b894",
+  "#fdcb6e",
+  "#74b9ff",
+  "#81ecec",
+  "#0984e3",
+  "#6c5ce7",
+  "#a29bfe",
+  "#d63031",
+  "#b2bec3",
+  "#2d3436",
+];
+const ASSET_ALLOCATION_COLOR_MAP = {
+  "A股": "#f19066",
+  "港股": "#74b9ff",
+  "美股": "#f78fb3",
+  "国债": "#a29bfe",
+  "美债": "#0984e3",
+  "黄金": "#fdcb6e",
+  "原油": "#2d3436",
+  "商品": "#b2bec3",
+  "现金": "#00b894",
+};
 const REMOTE_CHART_SOURCES = [
   {
     label: "历史净值",
@@ -56,12 +89,6 @@ const REMOTE_CHART_SOURCES = [
     file: "output/return_history.csv",
     axisAutoExact: true,
     valueFormat: "mixed",
-    axisRoundRules: [
-      {
-        seriesNames: ["总收益"],
-        step: 10000,
-      },
-    ],
     seriesDefinitions: [
       {
         name: "总收益",
@@ -87,6 +114,9 @@ const REMOTE_CHART_SOURCES = [
 ];
 const Y_SCALE_MODE_LINEAR = "linear";
 const Y_SCALE_MODE_LOG = "log";
+let navHistoryCostMap = null;
+let returnHistoryProfitMap = null;
+const remoteCsvTextCache = new Map();
 
 let activeInstance = null;
 const builtinInstances = [];
@@ -841,11 +871,23 @@ async function loadCsvTextFromRemote(file) {
   if (!url) {
     throw new Error("missing-source-url");
   }
-  const response = await fetch(url, { cache: "no-store" });
-  if (!response.ok) {
-    throw new Error(`failed-${response.status}`);
+  if (remoteCsvTextCache.has(url)) {
+    return remoteCsvTextCache.get(url);
   }
-  return response.text();
+  const requestPromise = (async () => {
+    const response = await fetch(url, { cache: "no-store" });
+    if (!response.ok) {
+      throw new Error(`failed-${response.status}`);
+    }
+    return response.text();
+  })();
+  remoteCsvTextCache.set(url, requestPromise);
+  try {
+    return await requestPromise;
+  } catch (error) {
+    remoteCsvTextCache.delete(url);
+    throw error;
+  }
 }
 
 async function loadUpdateDateFromDailyData() {
@@ -873,6 +915,262 @@ async function loadUpdateDateFromDailyData() {
     updateBannerDate(latestDate);
   } catch (error) {
     updateBannerDate(null);
+  }
+}
+
+function parseNumericCell(value) {
+  if (value === null || value === undefined) {
+    return Number.NaN;
+  }
+  const normalized = String(value).replace(/,/g, "").trim();
+  if (!normalized) {
+    return Number.NaN;
+  }
+  const num = Number(normalized);
+  return Number.isFinite(num) ? num : Number.NaN;
+}
+
+function normalizeHeaderName(name) {
+  return String(name || "").replace(/^\uFEFF/, "").trim();
+}
+
+function formatDateKey(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+    return "";
+  }
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+async function ensureNavHistoryCostMap() {
+  if (navHistoryCostMap) {
+    return navHistoryCostMap;
+  }
+  const map = new Map();
+  try {
+    const text = await loadCsvTextFromRemote(NAV_HISTORY_FILE);
+    const rows = parseCSV(text);
+    if (!rows.length || rows.length < 2) {
+      navHistoryCostMap = map;
+      return map;
+    }
+    const header = rows[0];
+    const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
+    const costIndex = header.findIndex((name) => normalizeHeaderName(name) === "总成本");
+    if (costIndex < 0) {
+      navHistoryCostMap = map;
+      return map;
+    }
+    rows.slice(1).forEach((row) => {
+      const rawDate = dateIndex >= 0 ? row[dateIndex] : row[0];
+      const parsedDate = parseDateValue(rawDate);
+      const dateKey = formatDateKey(parsedDate);
+      if (!dateKey) {
+        return;
+      }
+      const cost = parseNumericCell(row[costIndex]);
+      if (!Number.isFinite(cost)) {
+        return;
+      }
+      map.set(dateKey, cost);
+    });
+  } catch (error) {
+    // keep empty map
+  }
+  navHistoryCostMap = map;
+  return map;
+}
+
+async function ensureReturnHistoryProfitMap() {
+  if (returnHistoryProfitMap) {
+    return returnHistoryProfitMap;
+  }
+  const map = new Map();
+  try {
+    const text = await loadCsvTextFromRemote(RETURN_HISTORY_FILE);
+    const rows = parseCSV(text);
+    if (!rows.length || rows.length < 2) {
+      returnHistoryProfitMap = map;
+      return map;
+    }
+    const header = rows[0];
+    const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
+    const profitIndex = header.findIndex((name) => normalizeHeaderName(name) === "总收益");
+    if (profitIndex < 0) {
+      returnHistoryProfitMap = map;
+      return map;
+    }
+    rows.slice(1).forEach((row) => {
+      const rawDate = dateIndex >= 0 ? row[dateIndex] : row[0];
+      const parsedDate = parseDateValue(rawDate);
+      const dateKey = formatDateKey(parsedDate);
+      if (!dateKey) {
+        return;
+      }
+      const profit = parseNumericCell(row[profitIndex]);
+      if (!Number.isFinite(profit)) {
+        return;
+      }
+      map.set(dateKey, profit);
+    });
+  } catch (error) {
+    // keep empty map
+  }
+  returnHistoryProfitMap = map;
+  return map;
+}
+
+function formatIntegerMetric(value) {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+  const rounded = Math.round(value);
+  return new Intl.NumberFormat("zh-CN", {
+    maximumFractionDigits: 0,
+  }).format(rounded);
+}
+
+function setPanoramaAllocationVisibility(hasData) {
+  if (allocationWrap) {
+    allocationWrap.classList.toggle("is-hidden", !hasData);
+  }
+  if (allocationEmpty) {
+    allocationEmpty.classList.toggle("is-hidden", hasData);
+  }
+}
+
+function renderAssetAllocationPie(items) {
+  if (!allocationPie || !allocationLegend) {
+    return;
+  }
+  if (!items.length) {
+    allocationPie.style.background = "#eef1f6";
+    allocationLegend.innerHTML = "";
+    setPanoramaAllocationVisibility(false);
+    return;
+  }
+
+  let accumulated = 0;
+  const gradientParts = [];
+  const legendHtml = items
+    .map((item, index) => {
+      const color =
+        ASSET_ALLOCATION_COLOR_MAP[item.name] || PIE_COLORS[index % PIE_COLORS.length];
+      const start = accumulated * 100;
+      accumulated += item.ratio;
+      const end = (index === items.length - 1 ? 1 : accumulated) * 100;
+      gradientParts.push(`${color} ${start.toFixed(3)}% ${end.toFixed(3)}%`);
+      const percentText = `${(item.ratio * 100).toFixed(1)}%`;
+      return `<div class="allocation-item">
+        <span class="allocation-swatch" style="background:${color};"></span>
+        <span class="allocation-name">${escapeHtml(item.name)}</span>
+        <span class="allocation-percent">${percentText}</span>
+      </div>`;
+    })
+    .join("");
+
+  allocationPie.style.background = `conic-gradient(${gradientParts.join(", ")})`;
+  allocationLegend.innerHTML = legendHtml;
+  setPanoramaAllocationVisibility(true);
+}
+
+function renderPanoramaSummary(totalValue, totalCost, totalProfit) {
+  if (totalAssetValue) {
+    totalAssetValue.textContent = `总市值：${formatIntegerMetric(totalValue)}`;
+  }
+  if (totalCostValue) {
+    totalCostValue.textContent = `总成本：${formatIntegerMetric(totalCost)}`;
+  }
+  if (totalProfitValue) {
+    totalProfitValue.textContent = `总收益：${formatIntegerMetric(totalProfit)}`;
+  }
+}
+
+async function loadPanoramaFromConfigurationRatio() {
+  try {
+    const text = await loadCsvTextFromRemote(CONFIGURATION_RATIO_FILE);
+    const rows = parseCSV(text);
+    if (!rows.length || rows.length < 2) {
+      renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
+      renderAssetAllocationPie([]);
+      return;
+    }
+
+    const header = rows[0];
+    const dataRows = rows.slice(1).filter((row) => row.some((cell) => String(cell || "").trim() !== ""));
+    if (!dataRows.length) {
+      renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
+      renderAssetAllocationPie([]);
+      return;
+    }
+
+    const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
+    const totalIndex = header.findIndex((name) => normalizeHeaderName(name) === "总市值");
+    const ratioColumns = header
+      .map((name, index) => {
+        const label = normalizeHeaderName(name);
+        if (!/配置比例$/.test(label)) {
+          return null;
+        }
+        return {
+          index,
+          name: label.replace(/配置比例$/, "").trim(),
+        };
+      })
+      .filter(Boolean);
+
+    let latest = null;
+    dataRows.forEach((row) => {
+      const rawDate = dateIndex >= 0 ? row[dateIndex] : row[0];
+      const parsed = parseDateValue(rawDate);
+      if (parsed) {
+        if (!latest || parsed.getTime() > latest.date.getTime()) {
+          latest = { row, date: parsed, rawDate: String(rawDate || "").trim() };
+        }
+      } else if (!latest) {
+        latest = { row, date: null, rawDate: String(rawDate || "").trim() };
+      }
+    });
+
+    if (!latest) {
+      renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
+      renderAssetAllocationPie([]);
+      return;
+    }
+
+    const totalValue = totalIndex >= 0 ? parseNumericCell(latest.row[totalIndex]) : Number.NaN;
+    const dateKey = latest.date ? formatDateKey(latest.date) : formatDateKey(parseDateValue(latest.rawDate));
+    const [navCostMap, returnProfitMap] = await Promise.all([
+      ensureNavHistoryCostMap(),
+      ensureReturnHistoryProfitMap(),
+    ]);
+    const totalCost = dateKey && navCostMap.has(dateKey) ? navCostMap.get(dateKey) : Number.NaN;
+    const totalProfit = dateKey && returnProfitMap.has(dateKey) ? returnProfitMap.get(dateKey) : Number.NaN;
+    renderPanoramaSummary(totalValue, totalCost, totalProfit);
+
+    const allocations = ratioColumns
+      .map((column) => ({
+        name: column.name,
+        value: parseNumericCell(latest.row[column.index]),
+      }))
+      .filter((item) => Number.isFinite(item.value) && item.value > 0);
+
+    const ratioSum = allocations.reduce((sum, item) => sum + item.value, 0);
+    if (!(ratioSum > 0)) {
+      renderAssetAllocationPie([]);
+      return;
+    }
+
+    const normalizedAllocations = allocations.map((item) => ({
+      name: item.name,
+      ratio: item.value / ratioSum,
+    }));
+    renderAssetAllocationPie(normalizedAllocations);
+  } catch (error) {
+    renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
+    renderAssetAllocationPie([]);
   }
 }
 
@@ -1119,8 +1417,7 @@ async function loadBuiltInCharts() {
   }
 
   setDataSourceNote("已自动加载远程 nav/return/xirr 曲线图，可继续上传 CSV。");
-
-  for (const source of dataSources) {
+  const panels = dataSources.map((source) => {
     const title = getSourceLabel(source);
     const note = getSourceNote(source);
     const infoImage = "";
@@ -1153,61 +1450,71 @@ async function loadBuiltInCharts() {
         withInstance(instance, downloadChartImage);
       });
     }
+    return {
+      source,
+      title,
+      groupParts,
+      instance,
+    };
+  });
 
-    if (!source.file) {
-      setBuiltinPanelError(
-        groupParts.panel,
-        "未提供 CSV 文件名称。",
-        groupParts.axisSummary,
-        groupParts.seriesControls
-      );
-      continue;
-    }
+  await Promise.all(
+    panels.map(async ({ source, title, groupParts, instance }) => {
+      if (!source.file) {
+        setBuiltinPanelError(
+          groupParts.panel,
+          "未提供 CSV 文件名称。",
+          groupParts.axisSummary,
+          groupParts.seriesControls
+        );
+        return;
+      }
 
-    try {
-      const text = await loadCsvTextFromRemote(source.file);
-      const rows = parseCSV(text);
-      if (!rows.length || rows.length < 2) {
+      try {
+        const text = await loadCsvTextFromRemote(source.file);
+        const rows = parseCSV(text);
+        if (!rows.length || rows.length < 2) {
+          setBuiltinPanelError(
+            groupParts.panel,
+            "CSV 数据不足，请确认包含标题行和至少一行数据。",
+            groupParts.axisSummary,
+            groupParts.seriesControls
+          );
+          return;
+        }
+        const dataset = buildDataset(rows);
+        if (!dataset.series.length) {
+          setBuiltinPanelError(
+            groupParts.panel,
+            "未检测到可绘制的数值列，请检查表格内容。",
+            groupParts.axisSummary,
+            groupParts.seriesControls
+          );
+          return;
+        }
+        const sourceDataset = applySourceSeriesDefinitions(dataset, source);
+        if (!sourceDataset.series.length) {
+          setBuiltinPanelError(
+            groupParts.panel,
+            "未匹配到预设曲线列，请检查 CSV 表头。",
+            groupParts.axisSummary,
+            groupParts.seriesControls
+          );
+          return;
+        }
+        withInstance(instance, () => {
+          applyDataset(sourceDataset);
+        });
+      } catch (error) {
         setBuiltinPanelError(
           groupParts.panel,
-          "CSV 数据不足，请确认包含标题行和至少一行数据。",
+          `加载失败：${title}`,
           groupParts.axisSummary,
           groupParts.seriesControls
         );
-        continue;
       }
-      const dataset = buildDataset(rows);
-      if (!dataset.series.length) {
-        setBuiltinPanelError(
-          groupParts.panel,
-          "未检测到可绘制的数值列，请检查表格内容。",
-          groupParts.axisSummary,
-          groupParts.seriesControls
-        );
-        continue;
-      }
-      const sourceDataset = applySourceSeriesDefinitions(dataset, source);
-      if (!sourceDataset.series.length) {
-        setBuiltinPanelError(
-          groupParts.panel,
-          "未匹配到预设曲线列，请检查 CSV 表头。",
-          groupParts.axisSummary,
-          groupParts.seriesControls
-        );
-        continue;
-      }
-      withInstance(instance, () => {
-        applyDataset(sourceDataset);
-      });
-    } catch (error) {
-      setBuiltinPanelError(
-        groupParts.panel,
-        `加载失败：${title}`,
-        groupParts.axisSummary,
-        groupParts.seriesControls
-      );
-    }
-  }
+    })
+  );
 }
 
 function applyDataset(dataset) {
@@ -3109,3 +3416,4 @@ loadBuiltInCharts().catch(() => {
   setDataSourceNote("远程 CSV 自动加载失败，可继续上传 CSV。");
 });
 loadUpdateDateFromDailyData();
+loadPanoramaFromConfigurationRatio();

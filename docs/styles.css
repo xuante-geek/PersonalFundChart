@@ -77,6 +77,103 @@ body {
   line-height: 1.4;
 }
 
+.panorama {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(560px, 2fr);
+  gap: 20px;
+}
+
+.panorama-card {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(247, 248, 251, 0.95));
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 22px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.08);
+  padding: 22px 24px;
+}
+
+.panorama-card h2 {
+  font-size: 1.1rem;
+  margin-bottom: 8px;
+}
+
+.panorama-value {
+  font-size: 2rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+.panorama-subvalue {
+  margin-top: 10px;
+  font-size: 1.05rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.allocation-wrap {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.allocation-wrap.is-hidden {
+  display: none;
+}
+
+.allocation-pie {
+  width: 200px;
+  height: 200px;
+  border-radius: 50%;
+  background: #eef1f6;
+  flex: 0 0 200px;
+}
+
+.allocation-legend {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.allocation-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #f7f8fb;
+  border-radius: 10px;
+}
+
+.allocation-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.allocation-name {
+  font-size: 0.9rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.allocation-percent {
+  font-size: 0.9rem;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.allocation-empty {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.allocation-empty.is-hidden {
+  display: none;
+}
+
 .upload {
   display: inline-flex;
   align-items: center;
