@@ -89,6 +89,16 @@ const REMOTE_CHART_SOURCES = [
     file: "output/return_history.csv",
     axisAutoExact: true,
     valueFormat: "mixed",
+    axisTickFormatRules: [
+      {
+        seriesNames: ["总收益"],
+        format: "integer",
+      },
+      {
+        seriesNames: ["收益率"],
+        format: "percent1",
+      },
+    ],
     seriesDefinitions: [
       {
         name: "总收益",
@@ -629,6 +639,9 @@ function createChartInstance(options) {
           ? "mixed"
           : "number",
     axisRoundRules: Array.isArray(options.axisRoundRules) ? options.axisRoundRules : [],
+    axisTickFormatRules: Array.isArray(options.axisTickFormatRules)
+      ? options.axisTickFormatRules
+      : [],
   };
   attachInstanceEvents(instance);
   return instance;
@@ -1452,6 +1465,7 @@ async function loadBuiltInCharts() {
       axisAutoExact: source.axisAutoExact,
       valueFormat: source.valueFormat,
       axisRoundRules: source.axisRoundRules,
+      axisTickFormatRules: source.axisTickFormatRules,
       chart: groupParts.chart,
       legend: groupParts.legend,
       axisSummary: groupParts.axisSummary,
@@ -1820,6 +1834,32 @@ function resolveGroupRoundStep(group) {
     }
   }
   return null;
+}
+
+function resolveGroupTickFormat(group, fallbackFormat) {
+  const rules = Array.isArray(activeInstance?.axisTickFormatRules)
+    ? activeInstance.axisTickFormatRules
+    : [];
+  if (!rules.length || !group || !Array.isArray(group.series) || !group.series.length) {
+    return fallbackFormat;
+  }
+  for (const rule of rules) {
+    const names = Array.isArray(rule.seriesNames) ? rule.seriesNames : [];
+    const format = String(rule.format || "").trim().toLowerCase();
+    if (!names.length || !format) {
+      continue;
+    }
+    const nameSet = new Set(names);
+    const allInRule = group.series.every((series) => nameSet.has(series.name));
+    const atLeastOne = group.series.some((series) => nameSet.has(series.name));
+    if (!allInRule || !atLeastOne) {
+      continue;
+    }
+    if (format === "integer" || format === "percent1" || format === "percent" || format === "number") {
+      return format;
+    }
+  }
+  return fallbackFormat;
 }
 
 function getGroupValueFormat(group) {
@@ -2608,6 +2648,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
     const scale = groupScaleMap ? groupScaleMap.get(group) : resolveGroupScale(group, false);
     const ticks = createYAxisTicks(scale, tickCount);
     const groupValueFormat = getGroupValueFormat(group);
+    const groupTickFormat = resolveGroupTickFormat(group, groupValueFormat);
     ticks.forEach((tick) => {
       const y = mapYValue(tick, scale, top, height);
       if (!Number.isFinite(y)) {
@@ -2618,7 +2659,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
         y: y + 4,
         "text-anchor": align,
       });
-      text.textContent = formatMetricValue(tick, groupValueFormat);
+      text.textContent = formatAxisTickValue(tick, groupTickFormat);
       svg.appendChild(text);
     });
 
@@ -2627,7 +2668,7 @@ function drawAxes(svg, groups, left, top, width, height, axisGap, tickCount, gro
       y: top - 12,
       "text-anchor": align,
     });
-    const isPercentAxis = groupValueFormat === "percent";
+    const isPercentAxis = groupTickFormat === "percent" || groupTickFormat === "percent1";
     label.textContent =
       scale && scale.mode === Y_SCALE_MODE_LOG
         ? `Y 轴 ${index + 1}（对数）`
@@ -2905,6 +2946,29 @@ function formatNumber(value) {
     maximumFractionDigits: 2,
   });
   return formatter.format(rounded);
+}
+
+function formatAxisTickValue(value, tickFormat) {
+  if (!Number.isFinite(value)) {
+    return "";
+  }
+  if (tickFormat === "integer") {
+    const rounded = Math.round(value);
+    return new Intl.NumberFormat("zh-CN", {
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
+    }).format(rounded);
+  }
+  if (tickFormat === "percent1") {
+    const percent = value * 100;
+    const rounded = Math.round(percent * 10) / 10;
+    const formatter = new Intl.NumberFormat("zh-CN", {
+      minimumFractionDigits: 1,
+      maximumFractionDigits: 1,
+    });
+    return `${formatter.format(rounded)}%`;
+  }
+  return formatMetricValue(value, tickFormat);
 }
 
 function formatMetricValue(value, valueFormat) {
