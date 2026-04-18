@@ -1047,6 +1047,7 @@ function renderAssetAllocationPie(items) {
   }
   if (!items.length) {
     allocationPie.style.background = "#eef1f6";
+    allocationPie.innerHTML = "";
     allocationLegend.innerHTML = "";
     setPanoramaAllocationVisibility(false);
     return;
@@ -1054,15 +1055,28 @@ function renderAssetAllocationPie(items) {
 
   let accumulated = 0;
   const gradientParts = [];
+  const pieLabelHtml = [];
+  const MIN_LABEL_RATIO = 0.05;
   const legendHtml = items
     .map((item, index) => {
       const color =
         ASSET_ALLOCATION_COLOR_MAP[item.name] || PIE_COLORS[index % PIE_COLORS.length];
-      const start = accumulated * 100;
+      const startRatio = accumulated;
+      const start = startRatio * 100;
       accumulated += item.ratio;
-      const end = (index === items.length - 1 ? 1 : accumulated) * 100;
+      const endRatio = index === items.length - 1 ? 1 : accumulated;
+      const end = endRatio * 100;
       gradientParts.push(`${color} ${start.toFixed(3)}% ${end.toFixed(3)}%`);
       const percentText = `${(item.ratio * 100).toFixed(1)}%`;
+      if (item.ratio >= MIN_LABEL_RATIO) {
+        const midRatio = (startRatio + endRatio) / 2;
+        const theta = midRatio * Math.PI * 2 - Math.PI / 2;
+        const labelX = 50 + Math.cos(theta) * 29;
+        const labelY = 50 + Math.sin(theta) * 29;
+        pieLabelHtml.push(
+          `<span class="allocation-pie-label" style="left:${labelX.toFixed(2)}%;top:${labelY.toFixed(2)}%;">${escapeHtml(item.name)}</span>`
+        );
+      }
       return `<div class="allocation-item">
         <span class="allocation-swatch" style="background:${color};"></span>
         <span class="allocation-name">${escapeHtml(item.name)}</span>
@@ -1072,6 +1086,7 @@ function renderAssetAllocationPie(items) {
     .join("");
 
   allocationPie.style.background = `conic-gradient(${gradientParts.join(", ")})`;
+  allocationPie.innerHTML = pieLabelHtml.join("");
   allocationLegend.innerHTML = legendHtml;
   setPanoramaAllocationVisibility(true);
 }
@@ -1081,10 +1096,10 @@ function renderPanoramaSummary(totalValue, totalCost, totalProfit) {
     totalAssetValue.textContent = `总市值：${formatIntegerMetric(totalValue)}`;
   }
   if (totalCostValue) {
-    totalCostValue.textContent = `总成本：${formatIntegerMetric(totalCost)}`;
+    totalCostValue.textContent = `本金：${formatIntegerMetric(totalCost)}`;
   }
   if (totalProfitValue) {
-    totalProfitValue.textContent = `总收益：${formatIntegerMetric(totalProfit)}`;
+    totalProfitValue.textContent = `收益：${formatIntegerMetric(totalProfit)}`;
   }
 }
 
