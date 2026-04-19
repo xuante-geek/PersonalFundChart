@@ -19,6 +19,9 @@ const allocationWrap = document.getElementById("allocationWrap");
 const allocationPie = document.getElementById("allocationPie");
 const allocationLegend = document.getElementById("allocationLegend");
 const allocationEmpty = document.getElementById("allocationEmpty");
+const holdingsWrap = document.getElementById("holdingsWrap");
+const holdingsChart = document.getElementById("holdingsChart");
+const holdingsEmpty = document.getElementById("holdingsEmpty");
 let infoModal = document.getElementById("infoModal");
 let infoModalImage = document.getElementById("infoModalImage");
 let infoModalLoading = document.querySelector(".info-modal__loading");
@@ -1054,6 +1057,95 @@ function setPanoramaAllocationVisibility(hasData) {
   }
 }
 
+function setPanoramaHoldingsVisibility(hasData) {
+  if (holdingsWrap) {
+    holdingsWrap.classList.toggle("is-hidden", !hasData);
+  }
+  if (holdingsEmpty) {
+    holdingsEmpty.classList.toggle("is-hidden", hasData);
+  }
+}
+
+function renderPanoramaHoldings(rows) {
+  if (!holdingsChart) {
+    return;
+  }
+  if (!Array.isArray(rows) || !rows.length) {
+    holdingsChart.innerHTML = "";
+    setPanoramaHoldingsVisibility(false);
+    return;
+  }
+
+  const chartMax = rows.reduce((maxValue, row) => {
+    const stackedRight = Math.max(0, row.cost) + Math.max(0, row.profit);
+    return Math.max(maxValue, stackedRight);
+  }, 0);
+  const safeMax = chartMax > 0 ? chartMax : 1;
+
+  const html = rows
+    .map((row) => {
+      const cost = Math.max(0, row.cost);
+      const profit = Number.isFinite(row.profit) ? row.profit : 0;
+      const costPct = (cost / safeMax) * 100;
+
+      let barShapeHtml = "";
+      if (profit > 0) {
+        const profitPct = (profit / safeMax) * 100;
+        const totalPct = Math.max(costPct + profitPct, 0);
+        if (totalPct > 0) {
+          const totalValue = cost + profit;
+          const costShare = totalValue > 0 ? (cost / totalValue) * 100 : 0;
+          const profitShare = Math.max(0, 100 - costShare);
+          barShapeHtml = `<span class="holding-bar-shape" style="width:${totalPct.toFixed(3)}%;">
+            <span class="holding-segment holding-segment--cost" style="left:0%;width:${Math.max(costShare, 0).toFixed(3)}%;"></span>
+            <span class="holding-segment holding-segment--profit-positive" style="left:${Math.max(costShare, 0).toFixed(3)}%;width:${Math.max(profitShare, 0).toFixed(3)}%;"></span>
+          </span>`;
+        }
+      } else if (profit < 0) {
+        const cappedAbsLoss = Math.min(Math.abs(profit), cost);
+        if (costPct > 0) {
+          const lossShare = cost > 0 ? (cappedAbsLoss / cost) * 100 : 0;
+          const lossLeftShare = Math.max(0, 100 - lossShare);
+          barShapeHtml = `<span class="holding-bar-shape" style="width:${Math.max(costPct, 0).toFixed(3)}%;">
+            <span class="holding-segment holding-segment--cost" style="left:0%;width:100%;"></span>
+            <span class="holding-segment holding-segment--profit-negative" style="left:${lossLeftShare.toFixed(3)}%;width:${Math.max(lossShare, 0).toFixed(3)}%;"></span>
+          </span>`;
+        }
+      } else if (costPct > 0) {
+        barShapeHtml = `<span class="holding-bar-shape" style="width:${Math.max(costPct, 0).toFixed(3)}%;">
+          <span class="holding-segment holding-segment--cost" style="left:0%;width:100%;"></span>
+        </span>`;
+      }
+
+      const profitClass =
+        profit > 0
+          ? "holding-profit-text--positive"
+          : profit < 0
+            ? "holding-profit-text--negative"
+            : "";
+      const rateText = Number.isFinite(row.returnRate)
+        ? `${(row.returnRate * 100).toFixed(1)}%`
+        : "--";
+      const rateDisplayHtml = row.hideRate
+        ? ""
+        : `<span class="${profitClass}">${rateText}</span>`;
+
+      return `<div class="holding-row">
+        <div class="holding-name">${escapeHtml(row.name)}</div>
+        <div class="holding-bar-track">
+          ${barShapeHtml}
+        </div>
+        <div class="holding-values">
+          ${rateDisplayHtml}
+        </div>
+      </div>`;
+    })
+    .join("");
+
+  holdingsChart.innerHTML = html;
+  setPanoramaHoldingsVisibility(true);
+}
+
 function renderAssetAllocationPie(items) {
   if (!allocationPie || !allocationLegend) {
     return;
@@ -1114,6 +1206,89 @@ function renderPanoramaSummary(totalValue, totalCost, totalProfit) {
   }
   if (totalProfitValue) {
     totalProfitValue.textContent = `收益：${formatIntegerMetric(totalProfit)}`;
+  }
+}
+
+async function loadPanoramaHoldingsFromDailyData() {
+  try {
+    const text = await loadCsvTextFromRemote(DAILY_UPDATE_FILE);
+    const rows = parseCSV(text);
+    if (!rows.length || rows.length < 2) {
+      renderPanoramaHoldings([]);
+      return;
+    }
+
+    const header = rows[0];
+    const dataRows = rows
+      .slice(1)
+      .filter((row) => row.some((cell) => String(cell || "").trim() !== ""));
+    if (!dataRows.length) {
+      renderPanoramaHoldings([]);
+      return;
+    }
+
+    const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
+    const nameIndex = 1;
+    let costIndex = header.findIndex((name) => normalizeHeaderName(name) === "持仓成本");
+    if (costIndex < 0) {
+      costIndex = header.findIndex((name) => normalizeHeaderName(name).includes("持仓成本"));
+    }
+    let profitIndex = header.findIndex((name) => normalizeHeaderName(name) === "盈亏");
+    if (profitIndex < 0) {
+      profitIndex = header.findIndex((name) => normalizeHeaderName(name).includes("盈亏"));
+    }
+    let returnRateIndex = header.findIndex((name) => normalizeHeaderName(name) === "收益率");
+    if (returnRateIndex < 0) {
+      returnRateIndex = header.findIndex((name) => normalizeHeaderName(name).includes("收益率"));
+    }
+    if (nameIndex < 0 || costIndex < 0 || profitIndex < 0) {
+      renderPanoramaHoldings([]);
+      return;
+    }
+
+    let latestDate = null;
+    dataRows.forEach((row) => {
+      const parsed = parseDateValue(dateIndex >= 0 ? row[dateIndex] : row[0]);
+      if (!parsed) {
+        return;
+      }
+      if (!latestDate || parsed.getTime() > latestDate.getTime()) {
+        latestDate = parsed;
+      }
+    });
+
+    const latestKey = latestDate ? formatDateKey(latestDate) : "";
+    const latestRows = latestKey
+      ? dataRows.filter((row) => formatDateKey(parseDateValue(dateIndex >= 0 ? row[dateIndex] : row[0])) === latestKey)
+      : dataRows;
+
+    const holdings = latestRows
+      .map((row) => {
+        const rawName = String(row[nameIndex] || "").trim();
+        if (!rawName || rawName === "__TOTAL__") {
+          return null;
+        }
+        const isCashRow = rawName.toLowerCase() === "cash_total";
+        const displayName = isCashRow ? "现金" : rawName;
+        const cost = parseNumericCell(row[costIndex]);
+        if (!Number.isFinite(cost) || cost < 0) {
+          return null;
+        }
+        const profit = parseNumericCell(row[profitIndex]);
+        return {
+          name: displayName,
+          cost: Math.round(cost),
+          profit: Number.isFinite(profit) ? Math.round(profit) : 0,
+          returnRate:
+            returnRateIndex >= 0 ? parseNumericCell(row[returnRateIndex]) : Number.NaN,
+          hideRate: isCashRow,
+        };
+      })
+      .filter(Boolean);
+
+    renderPanoramaHoldings(holdings);
+  } catch (error) {
+    renderPanoramaHoldings([]);
   }
 }
 
@@ -3497,3 +3672,4 @@ loadBuiltInCharts().catch(() => {
 });
 loadUpdateDateFromDailyData();
 loadPanoramaFromConfigurationRatio();
+loadPanoramaHoldingsFromDailyData();

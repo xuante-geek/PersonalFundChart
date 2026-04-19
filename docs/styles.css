@@ -79,7 +79,7 @@ body {
 
 .panorama {
   display: grid;
-  grid-template-columns: minmax(300px, 1fr) minmax(560px, 2fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
 }
 
@@ -107,6 +107,15 @@ body {
   font-size: 1.05rem;
   color: var(--muted);
   font-weight: 600;
+}
+
+.holdings-title {
+  margin-top: 16px;
+  margin-bottom: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+  font-size: 1rem;
+  color: var(--ink);
 }
 
 .allocation-wrap {
@@ -205,6 +214,95 @@ body {
 }
 
 .allocation-empty.is-hidden {
+  display: none;
+}
+
+.holdings-wrap.is-hidden {
+  display: none;
+}
+
+.holdings-chart {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.holding-row {
+  display: grid;
+  grid-template-columns: minmax(96px, 140px) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+
+.holding-name {
+  font-size: 0.9rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.holding-bar-track {
+  position: relative;
+  height: 18px;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+
+.holding-bar-shape {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.holding-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 0;
+}
+
+.holding-segment--cost {
+  background: #607CAC;
+}
+
+.holding-segment--profit-positive {
+  background: #AEBDD5;
+}
+
+.holding-segment--profit-negative {
+  background: #DA5B62;
+}
+
+.holding-values {
+  display: block;
+  justify-self: end;
+  font-size: 0.82rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.holding-profit-text--positive {
+  color: #607CAC;
+  font-weight: 600;
+}
+
+.holding-profit-text--negative {
+  color: #DA5B62;
+  font-weight: 600;
+}
+
+.holdings-empty {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.holdings-empty.is-hidden {
   display: none;
 }
 
