@@ -77,12 +77,12 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "number",
     seriesDefinitions: [
-      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#f19066", type: "line" } },
-      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#74b9ff", type: "line" } },
-      { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#d63031", type: "line" } },
+      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#74b9ff", type: "line" } },
+      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#d63031", type: "line" } },
+      { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#f19066", type: "line" } },
       { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false, style: { color: "#00b894", type: "line" } },
       { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false, style: { color: "#a29bfe", type: "line" } },
-      { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false, style: { color: "#2d3436", type: "line" } },
+      { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false, style: { color: "#f78fb3", type: "line" } },
       { name: "纳斯达克指数", candidates: ["纳斯达克指数", "纳斯达克指数除首", "纳斯达克指数点位"], defaultVisible: false, style: { color: "#fdcb6e", type: "line" } },
     ],
   },
@@ -111,7 +111,7 @@ const REMOTE_CHART_SOURCES = [
         derive: { type: "subtract", left: "总市值", right: "总成本" },
         style: { color: "#636e72", type: "area" },
       },
-      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#f19066", type: "line" } },
+      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
     ],
   },
   {
@@ -121,7 +121,7 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "percent",
     seriesDefinitions: [
-      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#f19066", type: "line" } },
+      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
     ],
   },
 ];
@@ -1070,8 +1070,12 @@ function renderPanoramaHoldings(rows) {
   if (!holdingsChart) {
     return;
   }
+  const panoramaTotalCard = holdingsChart.closest(".panorama-total");
   if (!Array.isArray(rows) || !rows.length) {
     holdingsChart.innerHTML = "";
+    if (panoramaTotalCard) {
+      panoramaTotalCard.style.removeProperty("--holding-rate-col-width");
+    }
     setPanoramaHoldingsVisibility(false);
     return;
   }
@@ -1081,6 +1085,20 @@ function renderPanoramaHoldings(rows) {
     return Math.max(maxValue, stackedRight);
   }, 0);
   const safeMax = chartMax > 0 ? chartMax : 1;
+  const getRateText = (row) =>
+    Number.isFinite(row.positionPct) ? `${(row.positionPct * 100).toFixed(1)}%` : "--";
+  const maxRateTextLength = rows.reduce((maxLength, row) => {
+    if (row.hideRate) {
+      return maxLength;
+    }
+    return Math.max(maxLength, getRateText(row).length);
+  }, 2);
+  if (panoramaTotalCard) {
+    panoramaTotalCard.style.setProperty(
+      "--holding-rate-col-width",
+      `${(maxRateTextLength + 0.4).toFixed(2)}ch`
+    );
+  }
 
   const html = rows
     .map((row) => {
@@ -1123,12 +1141,10 @@ function renderPanoramaHoldings(rows) {
           : profit < 0
             ? "holding-profit-text--negative"
             : "";
-      const rateText = Number.isFinite(row.returnRate)
-        ? `${(row.returnRate * 100).toFixed(1)}%`
-        : "--";
+      const rateText = getRateText(row);
       const rateDisplayHtml = row.hideRate
         ? ""
-        : `<span class="${profitClass}">${rateText}</span>`;
+        : `<span class="holding-rate-value ${profitClass}">${rateText}</span>`;
 
       return `<div class="holding-row">
         <div class="holding-name">${escapeHtml(row.name)}</div>
@@ -1237,9 +1253,9 @@ async function loadPanoramaHoldingsFromDailyData() {
     if (profitIndex < 0) {
       profitIndex = header.findIndex((name) => normalizeHeaderName(name).includes("盈亏"));
     }
-    let returnRateIndex = header.findIndex((name) => normalizeHeaderName(name) === "收益率");
-    if (returnRateIndex < 0) {
-      returnRateIndex = header.findIndex((name) => normalizeHeaderName(name).includes("收益率"));
+    let marketValueIndex = header.findIndex((name) => normalizeHeaderName(name) === "市值");
+    if (marketValueIndex < 0) {
+      marketValueIndex = header.findIndex((name) => normalizeHeaderName(name).includes("市值"));
     }
     if (nameIndex < 0 || costIndex < 0 || profitIndex < 0) {
       renderPanoramaHoldings([]);
@@ -1262,26 +1278,60 @@ async function loadPanoramaHoldingsFromDailyData() {
       ? dataRows.filter((row) => formatDateKey(parseDateValue(dateIndex >= 0 ? row[dateIndex] : row[0])) === latestKey)
       : dataRows;
 
+    let totalMarketValue = Number.NaN;
+    const totalRow = latestRows.find((row) => String(row[nameIndex] || "").trim() === "__TOTAL__");
+    if (totalRow && marketValueIndex >= 0) {
+      totalMarketValue = parseNumericCell(totalRow[marketValueIndex]);
+    }
+    if (!(Number.isFinite(totalMarketValue) && totalMarketValue > 0) && marketValueIndex >= 0) {
+      const sumMarketValue = latestRows.reduce((sum, row) => {
+        const rawName = String(row[nameIndex] || "").trim();
+        if (!rawName || rawName === "__TOTAL__") {
+          return sum;
+        }
+        const marketValue = parseNumericCell(row[marketValueIndex]);
+        if (!Number.isFinite(marketValue) || marketValue < 0) {
+          return sum;
+        }
+        return sum + marketValue;
+      }, 0);
+      if (sumMarketValue > 0) {
+        totalMarketValue = sumMarketValue;
+      }
+    }
+
     const holdings = latestRows
       .map((row) => {
         const rawName = String(row[nameIndex] || "").trim();
-        if (!rawName || rawName === "__TOTAL__") {
+        const normalizedName = rawName.toLowerCase();
+        if (
+          !rawName ||
+          rawName === "__TOTAL__" ||
+          normalizedName === "cash_total" ||
+          normalizedName === "cash" ||
+          rawName === "现金"
+        ) {
           return null;
         }
-        const isCashRow = rawName.toLowerCase() === "cash_total";
-        const displayName = isCashRow ? "现金" : rawName;
         const cost = parseNumericCell(row[costIndex]);
         if (!Number.isFinite(cost) || cost < 0) {
           return null;
         }
         const profit = parseNumericCell(row[profitIndex]);
+        const marketValue = marketValueIndex >= 0 ? parseNumericCell(row[marketValueIndex]) : Number.NaN;
+        const positionPct =
+          Number.isFinite(totalMarketValue) &&
+          totalMarketValue > 0 &&
+          Number.isFinite(marketValue) &&
+          marketValue >= 0
+            ? marketValue / totalMarketValue
+            : Number.NaN;
         return {
-          name: displayName,
+          name: rawName,
           cost: Math.round(cost),
           profit: Number.isFinite(profit) ? Math.round(profit) : 0,
-          returnRate:
-            returnRateIndex >= 0 ? parseNumericCell(row[returnRateIndex]) : Number.NaN,
-          hideRate: isCashRow,
+          positionPct,
+          hideRate: false,
         };
       })
       .filter(Boolean);
