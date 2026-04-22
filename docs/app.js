@@ -72,7 +72,6 @@ const ASSET_ALLOCATION_COLOR_MAP = {
 const REMOTE_CHART_SOURCES = [
   {
     label: "历史净值",
-    note: "数据源：nav_history.csv",
     file: "output/nav_history.csv",
     axisAutoExact: true,
     valueFormat: "number",
@@ -88,7 +87,6 @@ const REMOTE_CHART_SOURCES = [
   },
   {
     label: "综合收益率",
-    note: "数据源：return_history.csv",
     file: "output/return_history.csv",
     axisAutoExact: true,
     valueFormat: "mixed",
@@ -116,7 +114,6 @@ const REMOTE_CHART_SOURCES = [
   },
   {
     label: "综合XIRR收益率",
-    note: "数据源：xirr_history.csv",
     file: "output/xirr_history.csv",
     axisAutoExact: true,
     valueFormat: "percent",
@@ -358,6 +355,7 @@ function buildExportSvg() {
     .reference-line { stroke-width: 1; stroke-dasharray: 5 5; opacity: 0.6; }
     .value-bubble rect { fill: #fff; stroke-width: 1; opacity: 0.95; }
     .value-bubble text { font-weight: 600; }
+    .nav-change-bubble text { fill: #fff; font-weight: 800; font-size: 14px; }
   `;
   svg.insertBefore(style, svg.firstChild);
 
@@ -1446,13 +1444,10 @@ function getSourceLabel(source) {
 
 function getSourceNote(source) {
   if (!source) {
-    return "表格使用注释说明";
+    return "";
   }
   const note = String(source.note || "").trim();
-  if (note) {
-    return note;
-  }
-  return "表格使用注释说明";
+  return note;
 }
 
 function computeSeriesStats(values) {
@@ -1530,6 +1525,158 @@ function applySourceSeriesDefinitions(dataset, source) {
   };
 }
 
+function getLatestSeriesChangeRate(dataset, seriesName) {
+  if (!dataset || !Array.isArray(dataset.series) || !dataset.series.length) {
+    return Number.NaN;
+  }
+  const targetSeries = dataset.series.find(
+    (series) => String(series?.name || "").trim() === seriesName
+  );
+  if (!targetSeries || !Array.isArray(targetSeries.values)) {
+    return Number.NaN;
+  }
+
+  if (Array.isArray(dataset.xValues) && dataset.xValues.length === targetSeries.values.length) {
+    const datedPoints = targetSeries.values
+      .map((value, index) => {
+        if (!Number.isFinite(value)) {
+          return null;
+        }
+        const parsedDate = parseDateValue(dataset.xValues[index]);
+        if (!parsedDate) {
+          return null;
+        }
+        return { value, time: parsedDate.getTime() };
+      })
+      .filter(Boolean)
+      .sort((a, b) => a.time - b.time);
+    if (datedPoints.length >= 2) {
+      const latestValue = datedPoints[datedPoints.length - 1].value;
+      const prevValue = datedPoints[datedPoints.length - 2].value;
+      if (Number.isFinite(latestValue) && Number.isFinite(prevValue) && prevValue !== 0) {
+        return latestValue / prevValue - 1;
+      }
+    }
+  }
+
+  let latestValue = Number.NaN;
+  let prevValue = Number.NaN;
+  for (let index = targetSeries.values.length - 1; index >= 0; index -= 1) {
+    const value = targetSeries.values[index];
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    if (!Number.isFinite(latestValue)) {
+      latestValue = value;
+      continue;
+    }
+    prevValue = value;
+    break;
+  }
+  if (!Number.isFinite(latestValue) || !Number.isFinite(prevValue) || prevValue === 0) {
+    return Number.NaN;
+  }
+  return latestValue / prevValue - 1;
+}
+
+function drawNavChangeBubble(x, y, textValue, fillColor, bounds) {
+  if (!chart || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+  const paddingX = 10;
+  const paddingTop = 3;
+  const paddingBottom = 2;
+  const offsetX = 12;
+  const bubble = createSvg("g", {
+    class: "nav-change-bubble",
+    "pointer-events": "none",
+  });
+  const text = createSvg("text", {
+    x: 0,
+    y: 0,
+    fill: "#ffffff",
+    "font-size": "14",
+    "font-weight": "800",
+  });
+  text.textContent = textValue;
+  bubble.appendChild(text);
+  chart.appendChild(bubble);
+
+  const box = text.getBBox();
+  const width = box.width + paddingX * 2;
+  const height = box.height + paddingTop + paddingBottom;
+  let bubbleX = x + offsetX;
+  let bubbleY = y - height / 2;
+  if (bubbleY < bounds.top) {
+    bubbleY = bounds.top;
+  }
+  if (bubbleY + height > bounds.bottom) {
+    bubbleY = bounds.bottom - height;
+  }
+
+  const rect = createSvg("rect", {
+    x: bubbleX,
+    y: bubbleY,
+    width,
+    height,
+    rx: 10,
+    ry: 10,
+    fill: fillColor,
+  });
+  bubble.insertBefore(rect, text);
+  text.setAttribute("x", bubbleX + paddingX);
+  text.setAttribute("y", bubbleY + paddingTop + box.height / 2);
+  text.setAttribute("dominant-baseline", "middle");
+}
+
+function drawBuiltinNavChangeBubble(dataset, groups, xValues, numericX, xScale, yScale, bounds) {
+  if (!activeInstance || activeInstance.styleScope !== "builtin" || activeInstance.id !== NAV_HISTORY_FILE) {
+    return;
+  }
+  if (!dataset || !Array.isArray(dataset.series)) {
+    return;
+  }
+  const targetSeries = dataset.series.find(
+    (series) =>
+      String(series?.name || "").trim() === "基金净值" &&
+      visibility.get(series.id) !== false &&
+      series.hasData
+  );
+  if (!targetSeries) {
+    return;
+  }
+  const group = groups.find((entry) => entry.series.includes(targetSeries));
+  if (!group) {
+    return;
+  }
+  const last = getLastValue(targetSeries.values);
+  if (!last) {
+    return;
+  }
+  const xValue = numericX ? xValues[last.index] : last.index;
+  const x = xScale(xValue);
+  const y = yScale(last.value, group);
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+
+  const changeRate = getLatestSeriesChangeRate(dataset, "基金净值");
+  if (!Number.isFinite(changeRate)) {
+    return;
+  }
+  const percentValue = changeRate * 100;
+  let text = "0.0%";
+  let fillColor = "#6b6f7a";
+  if (percentValue > 0) {
+    text = `+${percentValue.toFixed(1)}%`;
+    fillColor = "#DF484C";
+  } else if (percentValue < 0) {
+    text = `${percentValue.toFixed(1)}%`;
+    fillColor = "#449782";
+  }
+  drawNavChangeBubble(x, y, text, fillColor, bounds);
+}
+
 function createBuiltinGroup(title, note, infoImage) {
   const group = document.createElement("section");
   group.className = "chart-group";
@@ -1562,10 +1709,15 @@ function createBuiltinGroup(title, note, infoImage) {
   panelHeader.className = "panel__header";
 
   const panelText = document.createElement("div");
-  const panelDesc = document.createElement("p");
-  const noteText = note || "表格使用注释说明";
-  panelDesc.innerHTML = formatNoteHtml(noteText);
-  panelText.appendChild(panelDesc);
+  const noteText = String(note || "").trim();
+  if (noteText) {
+    const panelDesc = document.createElement("p");
+    panelDesc.innerHTML = formatNoteHtml(noteText);
+    panelText.appendChild(panelDesc);
+    panelHeader.appendChild(panelText);
+  } else {
+    panelHeader.classList.add("panel__header--no-note");
+  }
 
   const actions = document.createElement("div");
   actions.className = "chart-actions";
@@ -1578,7 +1730,6 @@ function createBuiltinGroup(title, note, infoImage) {
   actions.appendChild(downloadBtn);
   actions.appendChild(legendBlock);
 
-  panelHeader.appendChild(panelText);
   panelHeader.appendChild(actions);
 
   const wrap = document.createElement("div");
@@ -2412,6 +2563,21 @@ function renderChart(dataset, visibleSeries) {
       });
     }
   });
+
+  drawBuiltinNavChangeBubble(
+    dataset,
+    groups,
+    xValues,
+    numericX,
+    xScale,
+    yScale,
+    {
+      left: paddingLeft,
+      right: paddingLeft + chartWidth,
+      top: paddingTop,
+      bottom: paddingTop + chartHeight,
+    }
+  );
 
   appendWatermark(chart, layout, width, height);
   renderSummary(groups);

@@ -972,9 +972,16 @@ body {
 
 .chart-panel--static .chart-actions {
   justify-content: flex-start;
+  align-items: flex-end;
+}
+
+.chart-panel--static .panel__header .button {
+  position: static;
+  margin-top: 12px;
 }
 
 .chart-wrap {
+  position: relative;
   background: linear-gradient(180deg, #ffffff 0%, #f7f8fb 100%);
   border-radius: 20px;
   padding: 16px;
@@ -1030,6 +1037,12 @@ svg text {
   font-family: "Manrope", "SF Pro Display", "PingFang SC", sans-serif;
   fill: #5b606b;
   font-size: 12px;
+}
+
+.nav-change-bubble text {
+  fill: #ffffff;
+  font-weight: 800;
+  font-size: 14px;
 }
 
 .axis-line {
