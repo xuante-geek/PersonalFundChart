@@ -15,10 +15,14 @@ const uploadGroupContent = document.getElementById("uploadGroupContent");
 const totalAssetValue = document.getElementById("totalAssetValue");
 const totalCostValue = document.getElementById("totalCostValue");
 const totalProfitValue = document.getElementById("totalProfitValue");
-const allocationWrap = document.getElementById("allocationWrap");
-const allocationPie = document.getElementById("allocationPie");
-const allocationLegend = document.getElementById("allocationLegend");
-const allocationEmpty = document.getElementById("allocationEmpty");
+const assetDistributionWrap = document.getElementById("assetDistributionWrap");
+const assetDistributionPie = document.getElementById("assetDistributionPie");
+const assetDistributionLegend = document.getElementById("assetDistributionLegend");
+const assetDistributionEmpty = document.getElementById("assetDistributionEmpty");
+const stockIndustryWrap = document.getElementById("stockIndustryWrap");
+const stockIndustryPie = document.getElementById("stockIndustryPie");
+const stockIndustryLegend = document.getElementById("stockIndustryLegend");
+const stockIndustryEmpty = document.getElementById("stockIndustryEmpty");
 const holdingsWrap = document.getElementById("holdingsWrap");
 const holdingsChart = document.getElementById("holdingsChart");
 const holdingsEmpty = document.getElementById("holdingsEmpty");
@@ -43,7 +47,8 @@ let dropdownListenerAttached = false;
 let dataSources = [];
 const remoteCsvBaseUrl = "https://personalfund-data-1399092305.cos.ap-guangzhou.myqcloud.com/data";
 const DAILY_UPDATE_FILE = "output/daily_data.csv";
-const CONFIGURATION_RATIO_FILE = "output/configuration_ratio.csv";
+const ASSET_DISTRIBUTION_RATIO_FILE = "output/asset_distribution_ratio.csv";
+const STOCK_INDUSTRY_DISTRIBUTION_RATIO_FILE = "output/stock_industry_distribution_ratio.csv";
 const NAV_HISTORY_FILE = "output/nav_history.csv";
 const RETURN_HISTORY_FILE = "output/return_history.csv";
 const PIE_COLORS = [
@@ -58,15 +63,7 @@ const PIE_COLORS = [
   "#b2bec3",
   "#2d3436",
 ];
-const ASSET_ALLOCATION_COLOR_MAP = {
-  "A股": "#f19066",
-  "港股": "#74b9ff",
-  "美股": "#f78fb3",
-  "国债": "#a29bfe",
-  "美债": "#0984e3",
-  "黄金": "#fdcb6e",
-  "原油": "#2d3436",
-  "商品": "#b2bec3",
+const ASSET_DISTRIBUTION_FIXED_COLOR_MAP = {
   "现金": "#00b894",
 };
 const REMOTE_CHART_SOURCES = [
@@ -81,6 +78,7 @@ const REMOTE_CHART_SOURCES = [
       { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#f19066", type: "line" } },
       { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false, style: { color: "#00b894", type: "line" } },
       { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false, style: { color: "#a29bfe", type: "line" } },
+      { name: "科创50指数", candidates: ["科创50指数", "科创50指数除首", "科创50指数点位"], defaultVisible: false, style: { color: "#0984e3", type: "line" } },
       { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false, style: { color: "#f78fb3", type: "line" } },
       { name: "纳斯达克指数", candidates: ["纳斯达克指数", "纳斯达克指数除首", "纳斯达克指数点位"], defaultVisible: false, style: { color: "#fdcb6e", type: "line" } },
     ],
@@ -1046,13 +1044,141 @@ function formatIntegerMetric(value) {
   }).format(rounded);
 }
 
-function setPanoramaAllocationVisibility(hasData) {
-  if (allocationWrap) {
-    allocationWrap.classList.toggle("is-hidden", !hasData);
+function normalizeColorValue(color) {
+  return String(color || "").trim().toLowerCase();
+}
+
+function hslToHex(h, s, l) {
+  const hue = ((h % 360) + 360) % 360;
+  const sat = Math.max(0, Math.min(100, s)) / 100;
+  const lig = Math.max(0, Math.min(100, l)) / 100;
+
+  const chroma = (1 - Math.abs(2 * lig - 1)) * sat;
+  const hPrime = hue / 60;
+  const x = chroma * (1 - Math.abs((hPrime % 2) - 1));
+
+  let r1 = 0;
+  let g1 = 0;
+  let b1 = 0;
+  if (hPrime >= 0 && hPrime < 1) {
+    r1 = chroma;
+    g1 = x;
+  } else if (hPrime >= 1 && hPrime < 2) {
+    r1 = x;
+    g1 = chroma;
+  } else if (hPrime >= 2 && hPrime < 3) {
+    g1 = chroma;
+    b1 = x;
+  } else if (hPrime >= 3 && hPrime < 4) {
+    g1 = x;
+    b1 = chroma;
+  } else if (hPrime >= 4 && hPrime < 5) {
+    r1 = x;
+    b1 = chroma;
+  } else {
+    r1 = chroma;
+    b1 = x;
   }
-  if (allocationEmpty) {
-    allocationEmpty.classList.toggle("is-hidden", hasData);
+
+  const m = lig - chroma / 2;
+  const toHex = (value) => Math.round((value + m) * 255).toString(16).padStart(2, "0");
+  return `#${toHex(r1)}${toHex(g1)}${toHex(b1)}`;
+}
+
+function getAdaptiveDistinctColor(seed, usedColors) {
+  for (let attempt = 0; attempt < 360; attempt += 1) {
+    const index = seed + attempt;
+    const hue = (index * 137.508) % 360;
+    const saturation = 68 - (index % 3) * 6;
+    const lightness = 54 + (index % 2) * 6;
+    const color = hslToHex(hue, saturation, lightness);
+    if (!usedColors.has(normalizeColorValue(color))) {
+      return color;
+    }
   }
+  return hslToHex((seed * 137.508) % 360, 65, 56);
+}
+
+function buildAdaptivePieColorMap(items, fixedColorMap = null) {
+  const colorByName = new Map();
+  const usedColors = new Set();
+
+  if (fixedColorMap && typeof fixedColorMap === "object") {
+    Object.entries(fixedColorMap).forEach(([name, color]) => {
+      const normalized = normalizeColorValue(color);
+      if (!name || !normalized) {
+        return;
+      }
+      colorByName.set(name, color);
+      usedColors.add(normalized);
+    });
+  }
+
+  const basePalette = [];
+  PIE_COLORS.forEach((color) => {
+    const normalized = normalizeColorValue(color);
+    if (!normalized || usedColors.has(normalized) || basePalette.includes(color)) {
+      return;
+    }
+    basePalette.push(color);
+  });
+
+  let paletteIndex = 0;
+  let adaptiveSeed = 0;
+  items.forEach((item) => {
+    if (colorByName.has(item.name)) {
+      return;
+    }
+    let picked = null;
+    while (paletteIndex < basePalette.length) {
+      const candidate = basePalette[paletteIndex];
+      paletteIndex += 1;
+      if (!usedColors.has(normalizeColorValue(candidate))) {
+        picked = candidate;
+        break;
+      }
+    }
+    if (!picked) {
+      picked = getAdaptiveDistinctColor(adaptiveSeed, usedColors);
+      adaptiveSeed += 1;
+    }
+    colorByName.set(item.name, picked);
+    usedColors.add(normalizeColorValue(picked));
+  });
+
+  return colorByName;
+}
+
+function setAllocationSectionVisibility(wrapEl, emptyEl, hasData) {
+  if (wrapEl) {
+    wrapEl.classList.toggle("is-hidden", !hasData);
+  }
+  if (emptyEl) {
+    emptyEl.classList.toggle("is-hidden", hasData);
+  }
+}
+
+function updateAllocationLegendColumns(pieEl, legendEl) {
+  if (!pieEl || !legendEl) {
+    return;
+  }
+  legendEl.classList.remove("is-two-columns");
+  if (!legendEl.children.length) {
+    return;
+  }
+  const pieSize = pieEl.getBoundingClientRect().height || pieEl.clientHeight;
+  if (!(pieSize > 0)) {
+    return;
+  }
+  const singleColumnHeight = legendEl.scrollHeight;
+  if (singleColumnHeight > pieSize) {
+    legendEl.classList.add("is-two-columns");
+  }
+}
+
+function refreshAllocationLegendLayouts() {
+  updateAllocationLegendColumns(assetDistributionPie, assetDistributionLegend);
+  updateAllocationLegendColumns(stockIndustryPie, stockIndustryLegend);
 }
 
 function setPanoramaHoldingsVisibility(hasData) {
@@ -1160,15 +1286,17 @@ function renderPanoramaHoldings(rows) {
   setPanoramaHoldingsVisibility(true);
 }
 
-function renderAssetAllocationPie(items) {
-  if (!allocationPie || !allocationLegend) {
+function renderAllocationDistribution(target, items, colorMap = null) {
+  const { wrap, pie, legend, empty } = target || {};
+  if (!pie || !legend) {
     return;
   }
-  if (!items.length) {
-    allocationPie.style.background = "#eef1f6";
-    allocationPie.innerHTML = "";
-    allocationLegend.innerHTML = "";
-    setPanoramaAllocationVisibility(false);
+  if (!Array.isArray(items) || !items.length) {
+    pie.style.background = "#eef1f6";
+    pie.innerHTML = "";
+    legend.innerHTML = "";
+    legend.classList.remove("is-two-columns");
+    setAllocationSectionVisibility(wrap, empty, false);
     return;
   }
 
@@ -1176,10 +1304,10 @@ function renderAssetAllocationPie(items) {
   const gradientParts = [];
   const pieLabelHtml = [];
   const MIN_LABEL_RATIO = 0.05;
+  const resolvedColorMap = buildAdaptivePieColorMap(items, colorMap);
   const legendHtml = items
     .map((item, index) => {
-      const color =
-        ASSET_ALLOCATION_COLOR_MAP[item.name] || PIE_COLORS[index % PIE_COLORS.length];
+      const color = resolvedColorMap.get(item.name) || PIE_COLORS[index % PIE_COLORS.length];
       const startRatio = accumulated;
       const start = startRatio * 100;
       accumulated += item.ratio;
@@ -1205,10 +1333,118 @@ function renderAssetAllocationPie(items) {
     .join("");
 
   const ringHtml = `<span class="allocation-pie-ring" style="background:conic-gradient(${gradientParts.join(", ")});"></span><span class="allocation-pie-hole" aria-hidden="true"></span>`;
-  allocationPie.style.background = "#eef1f6";
-  allocationPie.innerHTML = `${ringHtml}${pieLabelHtml.join("")}`;
-  allocationLegend.innerHTML = legendHtml;
-  setPanoramaAllocationVisibility(true);
+  pie.style.background = "#eef1f6";
+  pie.innerHTML = `${ringHtml}${pieLabelHtml.join("")}`;
+  legend.innerHTML = legendHtml;
+  updateAllocationLegendColumns(pie, legend);
+  requestAnimationFrame(() => updateAllocationLegendColumns(pie, legend));
+  setAllocationSectionVisibility(wrap, empty, true);
+}
+
+function getLatestRowByDate(header, dataRows) {
+  if (!Array.isArray(dataRows) || !dataRows.length) {
+    return null;
+  }
+  const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
+  let latest = null;
+  dataRows.forEach((row) => {
+    const rawDate = dateIndex >= 0 ? row[dateIndex] : row[0];
+    const parsed = parseDateValue(rawDate);
+    if (parsed) {
+      if (!latest || parsed.getTime() > latest.date.getTime()) {
+        latest = { row, date: parsed };
+      }
+      return;
+    }
+    if (!latest) {
+      latest = { row, date: null };
+    }
+  });
+  return latest ? latest.row : null;
+}
+
+function buildDistributionItemsFromRows(rows) {
+  if (!rows.length || rows.length < 2) {
+    return [];
+  }
+  const header = rows[0];
+  const dataRows = rows.slice(1).filter((row) => row.some((cell) => String(cell || "").trim() !== ""));
+  if (!dataRows.length) {
+    return [];
+  }
+  const latestRow = getLatestRowByDate(header, dataRows);
+  if (!latestRow) {
+    return [];
+  }
+  const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
+  const ratioColumnPattern = /(仓位|配置比例|分布比例|比例|占比|权重)$/;
+  const excludedColumnPattern = /^(日期|总市值|总成本|总收益|本金|收益|备注|股票成分总市值|市值)$/;
+
+  const allColumns = header.map((name, index) => ({
+    index,
+    normalized: normalizeHeaderName(name),
+  }));
+
+  const ratioColumns = allColumns.filter(({ index, normalized }) => {
+    if (index === dateIndex || !normalized) {
+      return false;
+    }
+    if (excludedColumnPattern.test(normalized)) {
+      return false;
+    }
+    if (/市值/.test(normalized)) {
+      return false;
+    }
+    return ratioColumnPattern.test(normalized);
+  });
+
+  const selectedColumns = ratioColumns.length
+    ? ratioColumns
+    : allColumns.filter(({ index, normalized }) => {
+      if (index === dateIndex || !normalized) {
+        return false;
+      }
+      if (excludedColumnPattern.test(normalized)) {
+        return false;
+      }
+      return true;
+    });
+
+  const rawItems = selectedColumns
+    .map(({ index, normalized }) => {
+      const value = parseNumericCell(latestRow[index]);
+      if (!Number.isFinite(value) || value <= 0) {
+        return null;
+      }
+      const displayName = normalized
+        .replace(/(配置比例|行业分布|分布比例|比例|仓位|占比|权重)$/, "")
+        .trim() || normalized;
+      return {
+        name: displayName,
+        value,
+      };
+    })
+    .filter(Boolean);
+
+  const total = rawItems.reduce((sum, item) => sum + item.value, 0);
+  if (!(total > 0)) {
+    return [];
+  }
+  return rawItems.map((item) => ({
+    name: item.name,
+    ratio: item.value / total,
+  }));
+}
+
+async function loadAllocationDistributionFromCsv(file, target, colorMap = null) {
+  try {
+    const text = await loadCsvTextFromRemote(file);
+    const rows = parseCSV(text);
+    const items = buildDistributionItemsFromRows(rows);
+    renderAllocationDistribution(target, items, colorMap);
+  } catch (error) {
+    renderAllocationDistribution(target, [], colorMap);
+  }
 }
 
 function renderPanoramaSummary(totalValue, totalCost, totalProfit) {
@@ -1340,13 +1576,12 @@ async function loadPanoramaHoldingsFromDailyData() {
   }
 }
 
-async function loadPanoramaFromConfigurationRatio() {
+async function loadPanoramaSummaryFromDailyData() {
   try {
-    const text = await loadCsvTextFromRemote(CONFIGURATION_RATIO_FILE);
+    const text = await loadCsvTextFromRemote(DAILY_UPDATE_FILE);
     const rows = parseCSV(text);
     if (!rows.length || rows.length < 2) {
       renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
-      renderAssetAllocationPie([]);
       return;
     }
 
@@ -1354,76 +1589,98 @@ async function loadPanoramaFromConfigurationRatio() {
     const dataRows = rows.slice(1).filter((row) => row.some((cell) => String(cell || "").trim() !== ""));
     if (!dataRows.length) {
       renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
-      renderAssetAllocationPie([]);
       return;
     }
 
     const dateIndex = header.findIndex((name) => normalizeHeaderName(name) === "日期");
-    const totalIndex = header.findIndex((name) => normalizeHeaderName(name) === "总市值");
-    const ratioColumns = header
-      .map((name, index) => {
-        const label = normalizeHeaderName(name);
-        if (!/配置比例$/.test(label)) {
-          return null;
-        }
-        return {
-          index,
-          name: label.replace(/配置比例$/, "").trim(),
-        };
-      })
-      .filter(Boolean);
+    let nameIndex = header.findIndex((name) => normalizeHeaderName(name) === "标的名称");
+    if (nameIndex < 0) {
+      nameIndex = 1;
+    }
+    let totalIndex = header.findIndex((name) => normalizeHeaderName(name) === "总市值");
+    if (totalIndex < 0) {
+      totalIndex = header.findIndex((name) => normalizeHeaderName(name) === "市值");
+    }
+    let costIndex = header.findIndex((name) => normalizeHeaderName(name) === "持仓成本");
+    if (costIndex < 0) {
+      costIndex = header.findIndex((name) => normalizeHeaderName(name).includes("持仓成本"));
+    }
+    let profitIndex = header.findIndex((name) => normalizeHeaderName(name) === "盈亏");
+    if (profitIndex < 0) {
+      profitIndex = header.findIndex((name) => normalizeHeaderName(name).includes("盈亏"));
+    }
+    if (nameIndex < 0 || totalIndex < 0 || costIndex < 0) {
+      renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
+      return;
+    }
 
-    let latest = null;
+    let latestDate = null;
     dataRows.forEach((row) => {
-      const rawDate = dateIndex >= 0 ? row[dateIndex] : row[0];
-      const parsed = parseDateValue(rawDate);
-      if (parsed) {
-        if (!latest || parsed.getTime() > latest.date.getTime()) {
-          latest = { row, date: parsed, rawDate: String(rawDate || "").trim() };
-        }
-      } else if (!latest) {
-        latest = { row, date: null, rawDate: String(rawDate || "").trim() };
+      const parsed = parseDateValue(dateIndex >= 0 ? row[dateIndex] : row[0]);
+      if (!parsed) {
+        return;
+      }
+      if (!latestDate || parsed.getTime() > latestDate.getTime()) {
+        latestDate = parsed;
       }
     });
 
-    if (!latest) {
+    const latestKey = latestDate ? formatDateKey(latestDate) : "";
+    const latestRows = latestKey
+      ? dataRows.filter((row) => formatDateKey(parseDateValue(dateIndex >= 0 ? row[dateIndex] : row[0])) === latestKey)
+      : dataRows;
+    if (!latestRows.length) {
       renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
-      renderAssetAllocationPie([]);
       return;
     }
 
-    const totalValue = totalIndex >= 0 ? parseNumericCell(latest.row[totalIndex]) : Number.NaN;
-    const dateKey = latest.date ? formatDateKey(latest.date) : formatDateKey(parseDateValue(latest.rawDate));
-    const [navCostMap, returnProfitMap] = await Promise.all([
-      ensureNavHistoryCostMap(),
-      ensureReturnHistoryProfitMap(),
-    ]);
-    const totalCost = dateKey && navCostMap.has(dateKey) ? navCostMap.get(dateKey) : Number.NaN;
-    const totalProfit = dateKey && returnProfitMap.has(dateKey) ? returnProfitMap.get(dateKey) : Number.NaN;
+    const isTotalRowName = (name) => {
+      const key = String(name || "").replace(/[\s_-]/g, "").toUpperCase();
+      return key === "TOTAL";
+    };
+    const totalRow = latestRows.find((row) => isTotalRowName(row[nameIndex])) || null;
+    if (!totalRow) {
+      renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
+      return;
+    }
+
+    const totalValue = parseNumericCell(totalRow[totalIndex]);
+    const totalCost = parseNumericCell(totalRow[costIndex]);
+    let totalProfit = profitIndex >= 0 ? parseNumericCell(totalRow[profitIndex]) : Number.NaN;
+    if (!Number.isFinite(totalProfit) && Number.isFinite(totalValue) && Number.isFinite(totalCost)) {
+      totalProfit = totalValue - totalCost;
+    }
     renderPanoramaSummary(totalValue, totalCost, totalProfit);
-
-    const allocations = ratioColumns
-      .map((column) => ({
-        name: column.name,
-        value: parseNumericCell(latest.row[column.index]),
-      }))
-      .filter((item) => Number.isFinite(item.value) && item.value > 0);
-
-    const ratioSum = allocations.reduce((sum, item) => sum + item.value, 0);
-    if (!(ratioSum > 0)) {
-      renderAssetAllocationPie([]);
-      return;
-    }
-
-    const normalizedAllocations = allocations.map((item) => ({
-      name: item.name,
-      ratio: item.value / ratioSum,
-    }));
-    renderAssetAllocationPie(normalizedAllocations);
   } catch (error) {
     renderPanoramaSummary(Number.NaN, Number.NaN, Number.NaN);
-    renderAssetAllocationPie([]);
   }
+}
+
+async function loadPanoramaDistributionPanels() {
+  const assetTarget = {
+    wrap: assetDistributionWrap,
+    pie: assetDistributionPie,
+    legend: assetDistributionLegend,
+    empty: assetDistributionEmpty,
+  };
+  const industryTarget = {
+    wrap: stockIndustryWrap,
+    pie: stockIndustryPie,
+    legend: stockIndustryLegend,
+    empty: stockIndustryEmpty,
+  };
+
+  await Promise.all([
+    loadAllocationDistributionFromCsv(
+      ASSET_DISTRIBUTION_RATIO_FILE,
+      assetTarget,
+      ASSET_DISTRIBUTION_FIXED_COLOR_MAP
+    ),
+    loadAllocationDistributionFromCsv(
+      STOCK_INDUSTRY_DISTRIBUTION_RATIO_FILE,
+      industryTarget
+    ),
+  ]);
 }
 
 function getSourceLabel(source) {
@@ -3877,6 +4134,7 @@ window.addEventListener("resize", () => {
       }
     });
   });
+  requestAnimationFrame(() => refreshAllocationLegendLayouts());
 });
 
 withInstance(uploadInstance, () => {
@@ -3887,5 +4145,6 @@ loadBuiltInCharts().catch(() => {
   setDataSourceNote("远程 CSV 自动加载失败，可继续上传 CSV。");
 });
 loadUpdateDateFromDailyData();
-loadPanoramaFromConfigurationRatio();
+loadPanoramaSummaryFromDailyData();
+loadPanoramaDistributionPanels();
 loadPanoramaHoldingsFromDailyData();

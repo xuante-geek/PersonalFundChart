@@ -96,8 +96,25 @@ body {
   margin-bottom: 8px;
 }
 
-.panorama-allocation h2 {
-  margin-bottom: 20px;
+.allocation-sections {
+  display: grid;
+  gap: 22px;
+}
+
+.allocation-section {
+  display: grid;
+  gap: 10px;
+}
+
+.allocation-section + .allocation-section {
+  padding-top: 18px;
+  border-top: 1px solid rgba(15, 23, 42, 0.08);
+}
+
+.allocation-section__title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--ink);
 }
 
 .panorama-value {
@@ -200,6 +217,13 @@ body {
   max-width: calc(100% - var(--allocation-pie-size) - var(--allocation-gap));
 }
 
+.allocation-legend.is-two-columns {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+  row-gap: 8px;
+  align-content: start;
+}
+
 .allocation-item {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -231,7 +255,7 @@ body {
 }
 
 .allocation-empty {
-  margin-top: 14px;
+  margin-top: 8px;
   color: var(--muted);
   font-size: 0.9rem;
 }

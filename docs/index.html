@@ -37,12 +37,32 @@
           <p class="holdings-empty" id="holdingsEmpty">暂无有效持仓数据</p>
         </article>
         <article class="panorama-card panorama-allocation">
-          <h2>大类资产配置比例</h2>
-          <div class="allocation-wrap" id="allocationWrap">
-            <div class="allocation-pie" id="allocationPie" aria-label="资产配置饼图"></div>
-            <div class="allocation-legend" id="allocationLegend"></div>
+          <div class="allocation-sections">
+            <section class="allocation-section">
+              <h3 class="allocation-section__title">资产配置分布</h3>
+              <div class="allocation-wrap" id="assetDistributionWrap">
+                <div
+                  class="allocation-pie"
+                  id="assetDistributionPie"
+                  aria-label="资产配置分布饼图"
+                ></div>
+                <div class="allocation-legend" id="assetDistributionLegend"></div>
+              </div>
+              <p class="allocation-empty" id="assetDistributionEmpty">暂无有效配置比例数据</p>
+            </section>
+            <section class="allocation-section">
+              <h3 class="allocation-section__title">股票行业分布</h3>
+              <div class="allocation-wrap" id="stockIndustryWrap">
+                <div
+                  class="allocation-pie"
+                  id="stockIndustryPie"
+                  aria-label="股票行业分布饼图"
+                ></div>
+                <div class="allocation-legend" id="stockIndustryLegend"></div>
+              </div>
+              <p class="allocation-empty" id="stockIndustryEmpty">暂无有效行业分布数据</p>
+            </section>
           </div>
-          <p class="allocation-empty" id="allocationEmpty">暂无有效配置比例数据</p>
         </article>
       </section>
 
