@@ -1538,15 +1538,13 @@ async function loadPanoramaHoldingsFromDailyData() {
       .map((row) => {
         const rawName = String(row[nameIndex] || "").trim();
         const normalizedName = rawName.toLowerCase();
-        if (
-          !rawName ||
-          rawName === "__TOTAL__" ||
-          normalizedName === "cash_total" ||
-          normalizedName === "cash" ||
-          rawName === "现金"
-        ) {
+        if (!rawName || rawName === "__TOTAL__") {
           return null;
         }
+        const displayName =
+          normalizedName === "cash_total" || normalizedName === "cash"
+            ? "现金"
+            : rawName;
         const cost = parseNumericCell(row[costIndex]);
         if (!Number.isFinite(cost) || cost < 0) {
           return null;
@@ -1561,7 +1559,7 @@ async function loadPanoramaHoldingsFromDailyData() {
             ? marketValue / totalMarketValue
             : Number.NaN;
         return {
-          name: rawName,
+          name: displayName,
           cost: Math.round(cost),
           profit: Number.isFinite(profit) ? Math.round(profit) : 0,
           positionPct,
