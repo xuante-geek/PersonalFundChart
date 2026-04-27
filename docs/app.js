@@ -1920,13 +1920,13 @@ function drawBuiltinNavChangeBubble(dataset, groups, xValues, numericX, xScale, 
     return;
   }
   const percentValue = changeRate * 100;
-  let text = "0.0%";
+  let text = "0.00%";
   let fillColor = "#6b6f7a";
   if (percentValue > 0) {
-    text = `+${percentValue.toFixed(1)}%`;
+    text = `+${percentValue.toFixed(2)}%`;
     fillColor = "#DF484C";
   } else if (percentValue < 0) {
-    text = `${percentValue.toFixed(1)}%`;
+    text = `${percentValue.toFixed(2)}%`;
     fillColor = "#449782";
   }
   drawNavChangeBubble(x, y, text, fillColor, bounds);
