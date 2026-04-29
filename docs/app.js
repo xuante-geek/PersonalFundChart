@@ -1163,6 +1163,7 @@ function updateAllocationLegendColumns(pieEl, legendEl) {
     return;
   }
   legendEl.classList.remove("is-two-columns");
+  legendEl.style.removeProperty("--legend-rows");
   if (!legendEl.children.length) {
     return;
   }
@@ -1172,6 +1173,8 @@ function updateAllocationLegendColumns(pieEl, legendEl) {
   }
   const singleColumnHeight = legendEl.scrollHeight;
   if (singleColumnHeight > pieSize) {
+    const rowCount = Math.ceil(legendEl.children.length / 2);
+    legendEl.style.setProperty("--legend-rows", String(Math.max(1, rowCount)));
     legendEl.classList.add("is-two-columns");
   }
 }
@@ -1296,16 +1299,18 @@ function renderAllocationDistribution(target, items, colorMap = null) {
     pie.innerHTML = "";
     legend.innerHTML = "";
     legend.classList.remove("is-two-columns");
+    legend.style.removeProperty("--legend-rows");
     setAllocationSectionVisibility(wrap, empty, false);
     return;
   }
 
+  const sortedItems = [...items].sort((a, b) => b.ratio - a.ratio);
   let accumulated = 0;
   const gradientParts = [];
   const pieLabelHtml = [];
   const MIN_LABEL_RATIO = 0.05;
-  const resolvedColorMap = buildAdaptivePieColorMap(items, colorMap);
-  const legendHtml = items
+  const resolvedColorMap = buildAdaptivePieColorMap(sortedItems, colorMap);
+  const legendHtml = sortedItems
     .map((item, index) => {
       const color = resolvedColorMap.get(item.name) || PIE_COLORS[index % PIE_COLORS.length];
       const startRatio = accumulated;
