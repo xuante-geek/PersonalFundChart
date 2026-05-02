@@ -53,15 +53,18 @@ const NAV_HISTORY_FILE = "output/nav_history.csv";
 const RETURN_HISTORY_FILE = "output/return_history.csv";
 const PIE_COLORS = [
   "#00b894",
-  "#fdcb6e",
-  "#74b9ff",
-  "#81ecec",
-  "#0984e3",
-  "#6c5ce7",
-  "#a29bfe",
-  "#d63031",
-  "#b2bec3",
-  "#2d3436",
+  "#7EA9D5",
+  "#6B82B5",
+  "#D7A652",
+  "#CA855E",
+  "#BA6861",
+  "#967EC3",
+  "#7070A8",
+  "#5F6B9A",
+  "#DFE6E9",
+  "#A2A6BB",
+  "#AE9A71",
+  "#905A55",
 ];
 const ASSET_DISTRIBUTION_FIXED_COLOR_MAP = {
   "现金": "#00b894",
@@ -73,8 +76,8 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "number",
     seriesDefinitions: [
-      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#74b9ff", type: "line" } },
-      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#d63031", type: "line" } },
+      { name: "基金净值", candidates: ["基金净值"], defaultVisible: true, style: { color: "#d63031", type: "line" } },
+      { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#636e72", type: "line" } },
       { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#f19066", type: "line" } },
       { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false, style: { color: "#00b894", type: "line" } },
       { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false, style: { color: "#a29bfe", type: "line" } },
@@ -105,9 +108,9 @@ const REMOTE_CHART_SOURCES = [
         defaultVisible: true,
         valueFormat: "number",
         derive: { type: "subtract", left: "总市值", right: "总成本" },
-        style: { color: "#636e72", type: "area" },
+        style: { color: "#b2bec3", type: "area" },
       },
-      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
+      { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#d63031", type: "line" } },
     ],
   },
   {
@@ -116,7 +119,7 @@ const REMOTE_CHART_SOURCES = [
     axisAutoExact: true,
     valueFormat: "percent",
     seriesDefinitions: [
-      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#74b9ff", type: "line" } },
+      { name: "XIRR收益率", candidates: ["XIRR"], defaultVisible: true, valueFormat: "percent", style: { color: "#d63031", type: "line" } },
     ],
   },
 ];
@@ -1184,6 +1187,59 @@ function refreshAllocationLegendLayouts() {
   updateAllocationLegendColumns(stockIndustryPie, stockIndustryLegend);
 }
 
+function buildDonutSegmentPath(cx, cy, outerRadius, innerRadius, startAngle, endAngle) {
+  const polar = (radius, angle) => ({
+    x: cx + Math.cos(angle) * radius,
+    y: cy + Math.sin(angle) * radius,
+  });
+  const outerStart = polar(outerRadius, startAngle);
+  const outerEnd = polar(outerRadius, endAngle);
+  const innerEnd = polar(innerRadius, endAngle);
+  const innerStart = polar(innerRadius, startAngle);
+  const delta = endAngle - startAngle;
+  const largeArcFlag = delta > Math.PI ? 1 : 0;
+  return [
+    `M ${outerStart.x.toFixed(4)} ${outerStart.y.toFixed(4)}`,
+    `A ${outerRadius.toFixed(4)} ${outerRadius.toFixed(4)} 0 ${largeArcFlag} 1 ${outerEnd.x.toFixed(4)} ${outerEnd.y.toFixed(4)}`,
+    `L ${innerEnd.x.toFixed(4)} ${innerEnd.y.toFixed(4)}`,
+    `A ${innerRadius.toFixed(4)} ${innerRadius.toFixed(4)} 0 ${largeArcFlag} 0 ${innerStart.x.toFixed(4)} ${innerStart.y.toFixed(4)}`,
+    "Z",
+  ].join(" ");
+}
+
+function buildDonutSvgMarkup(items, colorResolver) {
+  if (!Array.isArray(items) || !items.length) {
+    return "";
+  }
+  const cx = 50;
+  const cy = 50;
+  const outerRadius = 50;
+  const innerRadius = 25;
+  const fullCircle = Math.PI * 2;
+  let accumulated = 0;
+  const parts = [];
+
+  if (items.length === 1) {
+    const singleColor = colorResolver(items[0], 0);
+    return `<svg class="allocation-pie-svg" viewBox="0 0 100 100" aria-hidden="true">
+      <circle cx="${cx}" cy="${cy}" r="${((outerRadius + innerRadius) / 2).toFixed(4)}" fill="none" stroke="${singleColor}" stroke-width="${(outerRadius - innerRadius).toFixed(4)}"></circle>
+    </svg>`;
+  }
+
+  items.forEach((item, index) => {
+    const startRatio = accumulated;
+    accumulated += item.ratio;
+    const endRatio = index === items.length - 1 ? 1 : accumulated;
+    const startAngle = -Math.PI / 2 + startRatio * fullCircle;
+    const endAngle = -Math.PI / 2 + endRatio * fullCircle;
+    const color = colorResolver(item, index);
+    const pathD = buildDonutSegmentPath(cx, cy, outerRadius, innerRadius, startAngle, endAngle);
+    parts.push(`<path d="${pathD}" fill="${color}"></path>`);
+  });
+
+  return `<svg class="allocation-pie-svg" viewBox="0 0 100 100" aria-hidden="true">${parts.join("")}</svg>`;
+}
+
 function setPanoramaHoldingsVisibility(hasData) {
   if (holdingsWrap) {
     holdingsWrap.classList.toggle("is-hidden", !hasData);
@@ -1305,21 +1361,19 @@ function renderAllocationDistribution(target, items, colorMap = null) {
   }
 
   const sortedItems = [...items].sort((a, b) => b.ratio - a.ratio);
-  let accumulated = 0;
-  const gradientParts = [];
   const pieLabelHtml = [];
   const MIN_LABEL_RATIO = 0.05;
   const resolvedColorMap = buildAdaptivePieColorMap(sortedItems, colorMap);
+  const getColor = (item, index) =>
+    resolvedColorMap.get(item.name) || PIE_COLORS[index % PIE_COLORS.length];
+  let ratioCursor = 0;
   const legendHtml = sortedItems
     .map((item, index) => {
-      const color = resolvedColorMap.get(item.name) || PIE_COLORS[index % PIE_COLORS.length];
-      const startRatio = accumulated;
-      const start = startRatio * 100;
-      accumulated += item.ratio;
-      const endRatio = index === items.length - 1 ? 1 : accumulated;
-      const end = endRatio * 100;
-      gradientParts.push(`${color} ${start.toFixed(3)}% ${end.toFixed(3)}%`);
+      const color = getColor(item, index);
       const percentText = `${(item.ratio * 100).toFixed(1)}%`;
+      const startRatio = ratioCursor;
+      ratioCursor += item.ratio;
+      const endRatio = index === sortedItems.length - 1 ? 1 : ratioCursor;
       if (item.ratio >= MIN_LABEL_RATIO) {
         const midRatio = (startRatio + endRatio) / 2;
         const theta = midRatio * Math.PI * 2 - Math.PI / 2;
@@ -1337,9 +1391,8 @@ function renderAllocationDistribution(target, items, colorMap = null) {
     })
     .join("");
 
-  const ringHtml = `<span class="allocation-pie-ring" style="background:conic-gradient(${gradientParts.join(", ")});"></span><span class="allocation-pie-hole" aria-hidden="true"></span>`;
   pie.style.background = "#eef1f6";
-  pie.innerHTML = `${ringHtml}${pieLabelHtml.join("")}`;
+  pie.innerHTML = `${buildDonutSvgMarkup(sortedItems, getColor)}${pieLabelHtml.join("")}`;
   legend.innerHTML = legendHtml;
   updateAllocationLegendColumns(pie, legend);
   requestAnimationFrame(() => updateAllocationLegendColumns(pie, legend));
