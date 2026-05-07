@@ -652,12 +652,21 @@ body {
 
 .chart-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 12px;
-  align-items: center;
-  justify-content: flex-end;
+  align-items: flex-start;
+  justify-content: flex-start;
   flex: 1 1 100%;
+  min-width: 0;
   margin-top: 8px;
+}
+
+.chart-actions > .button {
+  flex: 0 0 auto;
+  order: 2;
+  margin-left: 0;
+  white-space: nowrap;
+  align-self: flex-start;
 }
 
 .data-source {
@@ -976,7 +985,7 @@ body {
 .chart-panel .panel__header {
   align-items: flex-start;
   position: relative;
-  padding-right: 160px;
+  padding-right: 0;
 }
 
 .chart-panel--static .panel__header {
@@ -985,12 +994,12 @@ body {
 
 .chart-panel--static .chart-actions {
   justify-content: flex-start;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .chart-panel--static .panel__header .button {
   position: static;
-  margin-top: 12px;
+  margin-top: 0;
 }
 
 .chart-wrap {
@@ -1263,21 +1272,20 @@ svg text {
   }
 }
 
-.chart-panel .panel__header .button {
-  position: absolute;
-  top: 0;
-  right: 0;
-}
-
 .chart-actions .legend {
-  margin-top: 36px;
+  order: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  margin-top: 0;
+  justify-content: flex-start;
 }
 
 .chart-panel--static .chart-actions .legend {
-  margin-top: 12px;
+  justify-content: flex-start;
 }
 
 #uploadChartPanel .legend {
-  flex: 1 1 100%;
+  flex: 1 1 auto;
   justify-content: flex-start;
 }

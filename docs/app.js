@@ -80,6 +80,7 @@ const REMOTE_CHART_SOURCES = [
       { name: "中证全A指数", candidates: ["中证全A指数", "中证全A指数除首", "中证全A指数点位"], defaultVisible: true, style: { color: "#636e72", type: "line" } },
       { name: "上证指数", candidates: ["上证指数", "上证指数除首", "上证指数点位"], defaultVisible: false, style: { color: "#f19066", type: "line" } },
       { name: "沪深300指数", candidates: ["沪深300指数", "沪深300指数除首", "沪深300指数点位"], defaultVisible: false, style: { color: "#00b894", type: "line" } },
+      { name: "中证A500指数", candidates: ["中证A500指数", "中证A500指数除首", "中证A500指数点位"], defaultVisible: false, style: { color: "#7EA9D5", type: "line" } },
       { name: "创业板指数", candidates: ["创业板指数", "创业板指数除首", "创业板指数点位"], defaultVisible: false, style: { color: "#a29bfe", type: "line" } },
       { name: "科创50指数", candidates: ["科创50指数", "科创50指数除首", "科创50指数点位"], defaultVisible: false, style: { color: "#0984e3", type: "line" } },
       { name: "恒生指数", candidates: ["恒生指数", "恒生指数除首", "恒生指数点位"], defaultVisible: false, style: { color: "#f78fb3", type: "line" } },
@@ -333,7 +334,7 @@ function buildExportSvg() {
   const svg = chart.cloneNode(true);
   svg.setAttribute("width", String(width));
   svg.setAttribute("height", String(height));
-  svg.querySelectorAll(".hover-line, .hover-dots, .hover-x-bubble").forEach((node) => node.remove());
+  svg.querySelectorAll(".hover-line, .hover-dots, .hover-x-bubble, .hover-nav-change-bubble").forEach((node) => node.remove());
 
   const ns = "http://www.w3.org/2000/svg";
   const background = document.createElementNS(ns, "rect");
@@ -1892,16 +1893,53 @@ function getLatestSeriesChangeRate(dataset, seriesName) {
   return latestValue / prevValue - 1;
 }
 
-function drawNavChangeBubble(x, y, textValue, fillColor, bounds) {
-  if (!chart || !Number.isFinite(x) || !Number.isFinite(y)) {
-    return;
+function getSeriesChangeRateAtIndex(values, index) {
+  if (!Array.isArray(values) || !Number.isInteger(index) || index < 0 || index >= values.length) {
+    return Number.NaN;
+  }
+  const currentValue = values[index];
+  if (!Number.isFinite(currentValue)) {
+    return Number.NaN;
+  }
+  let prevValue = Number.NaN;
+  for (let prevIndex = index - 1; prevIndex >= 0; prevIndex -= 1) {
+    const value = values[prevIndex];
+    if (!Number.isFinite(value)) {
+      continue;
+    }
+    prevValue = value;
+    break;
+  }
+  if (!Number.isFinite(prevValue) || prevValue === 0) {
+    return Number.NaN;
+  }
+  return currentValue / prevValue - 1;
+}
+
+function getNavChangeBubbleDisplay(changeRate) {
+  const percentValue = changeRate * 100;
+  let text = "0.00%";
+  let fillColor = "#6b6f7a";
+  if (percentValue > 0) {
+    text = `+${percentValue.toFixed(2)}%`;
+    fillColor = "#DF484C";
+  } else if (percentValue < 0) {
+    text = `${percentValue.toFixed(2)}%`;
+    fillColor = "#449782";
+  }
+  return { text, fillColor };
+}
+
+function appendNavChangeBubble(group, x, y, textValue, fillColor, bounds) {
+  if (!group || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return false;
   }
   const paddingX = 10;
   const paddingTop = 3;
   const paddingBottom = 2;
   const offsetX = 12;
   const bubble = createSvg("g", {
-    class: "nav-change-bubble",
+    class: "nav-change-bubble-item",
     "pointer-events": "none",
   });
   const text = createSvg("text", {
@@ -1913,7 +1951,7 @@ function drawNavChangeBubble(x, y, textValue, fillColor, bounds) {
   });
   text.textContent = textValue;
   bubble.appendChild(text);
-  chart.appendChild(bubble);
+  group.appendChild(bubble);
 
   const box = text.getBBox();
   const width = box.width + paddingX * 2;
@@ -1940,6 +1978,34 @@ function drawNavChangeBubble(x, y, textValue, fillColor, bounds) {
   text.setAttribute("x", bubbleX + paddingX);
   text.setAttribute("y", bubbleY + paddingTop + box.height / 2);
   text.setAttribute("dominant-baseline", "middle");
+  return true;
+}
+
+function renderNavChangeBubble(group, x, y, textValue, fillColor, bounds) {
+  if (!group || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+  while (group.firstChild) {
+    group.removeChild(group.firstChild);
+  }
+  group.setAttribute("opacity", "0");
+  const drawn = appendNavChangeBubble(group, x, y, textValue, fillColor, bounds);
+  if (!drawn) {
+    return;
+  }
+  group.setAttribute("opacity", "1");
+}
+
+function drawNavChangeBubble(x, y, textValue, fillColor, bounds) {
+  if (!chart || !Number.isFinite(x) || !Number.isFinite(y)) {
+    return;
+  }
+  const bubble = createSvg("g", {
+    class: "nav-change-bubble",
+    "pointer-events": "none",
+  });
+  chart.appendChild(bubble);
+  renderNavChangeBubble(bubble, x, y, textValue, fillColor, bounds);
 }
 
 function drawBuiltinNavChangeBubble(dataset, groups, xValues, numericX, xScale, yScale, bounds) {
@@ -1977,16 +2043,7 @@ function drawBuiltinNavChangeBubble(dataset, groups, xValues, numericX, xScale, 
   if (!Number.isFinite(changeRate)) {
     return;
   }
-  const percentValue = changeRate * 100;
-  let text = "0.00%";
-  let fillColor = "#6b6f7a";
-  if (percentValue > 0) {
-    text = `+${percentValue.toFixed(2)}%`;
-    fillColor = "#DF484C";
-  } else if (percentValue < 0) {
-    text = `${percentValue.toFixed(2)}%`;
-    fillColor = "#449782";
-  }
+  const { text, fillColor } = getNavChangeBubbleDisplay(changeRate);
   drawNavChangeBubble(x, y, text, fillColor, bounds);
 }
 
@@ -2917,10 +2974,18 @@ function renderChart(dataset, visibleSeries) {
   });
   chart.appendChild(hoverXBubble);
 
+  const hoverNavChangeBubble = createSvg("g", {
+    class: "nav-change-bubble hover-nav-change-bubble",
+    opacity: "0",
+    "pointer-events": "none",
+  });
+  chart.appendChild(hoverNavChangeBubble);
+
   hoverState = {
     line: hoverLine,
     dots: hoverDots,
     xBubble: hoverXBubble,
+    navChangeBubble: hoverNavChangeBubble,
     axisY: paddingTop + chartHeight,
     left: paddingLeft,
     right: paddingLeft + chartWidth,
@@ -3947,6 +4012,70 @@ function updateHoverXBubble(hoverPoint) {
   xBubble.setAttribute("opacity", "1");
 }
 
+function updateHoverNavChangeBubble(hoverPoint) {
+  if (!hoverState || !hoverState.navChangeBubble) {
+    return;
+  }
+  const {
+    navChangeBubble,
+    series,
+    seriesGroup,
+    yScale,
+    left,
+    right,
+    top,
+    bottom,
+  } = hoverState;
+  navChangeBubble.setAttribute("opacity", "0");
+  while (navChangeBubble.firstChild) {
+    navChangeBubble.removeChild(navChangeBubble.firstChild);
+  }
+  if (!activeInstance || activeInstance.styleScope !== "builtin" || activeInstance.id !== NAV_HISTORY_FILE) {
+    return;
+  }
+  const fundSeries = series.find(
+    (seriesItem) =>
+      String(seriesItem?.name || "").trim() === "基金净值" &&
+      visibility.get(seriesItem.id) !== false &&
+      seriesItem.hasData
+  );
+  if (!fundSeries || !Array.isArray(fundSeries.values)) {
+    return;
+  }
+  const currentValue = fundSeries.values[hoverPoint.index];
+  if (!Number.isFinite(currentValue)) {
+    return;
+  }
+  const latest = getLastValue(fundSeries.values);
+  if (latest && hoverPoint.index === latest.index) {
+    return;
+  }
+  const group = seriesGroup.get(fundSeries.id);
+  if (!group) {
+    return;
+  }
+  const y = yScale(currentValue, group);
+  if (!Number.isFinite(y)) {
+    return;
+  }
+  const changeRate = getSeriesChangeRateAtIndex(fundSeries.values, hoverPoint.index);
+  if (!Number.isFinite(changeRate)) {
+    return;
+  }
+  const { text, fillColor } = getNavChangeBubbleDisplay(changeRate);
+  const drawn = appendNavChangeBubble(
+    navChangeBubble,
+    hoverPoint.x,
+    y,
+    text,
+    fillColor,
+    { left, right, top, bottom }
+  );
+  if (drawn) {
+    navChangeBubble.setAttribute("opacity", "1");
+  }
+}
+
 function handleHoverMove(event) {
   if (!hoverState || !hoverState.line) {
     return;
@@ -3965,6 +4094,9 @@ function handleHoverMove(event) {
     if (hoverState.xBubble) {
       hoverState.xBubble.setAttribute("opacity", "0");
     }
+    if (hoverState.navChangeBubble) {
+      hoverState.navChangeBubble.setAttribute("opacity", "0");
+    }
     return;
   }
 
@@ -3978,6 +4110,7 @@ function handleHoverMove(event) {
   hoverState.line.setAttribute("x2", hoverPoint.x);
   updateHoverDots(hoverPoint);
   updateHoverXBubble(hoverPoint);
+  updateHoverNavChangeBubble(hoverPoint);
 }
 
 function hideHoverLine() {
@@ -3989,6 +4122,9 @@ function hideHoverLine() {
   }
   if (hoverState && hoverState.xBubble) {
     hoverState.xBubble.setAttribute("opacity", "0");
+  }
+  if (hoverState && hoverState.navChangeBubble) {
+    hoverState.navChangeBubble.setAttribute("opacity", "0");
   }
 }
 
