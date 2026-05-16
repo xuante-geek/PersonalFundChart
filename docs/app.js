@@ -94,7 +94,7 @@ const REMOTE_CHART_SOURCES = [
     valueFormat: "mixed",
     axisTickFormatRules: [
       {
-        seriesNames: ["总收益"],
+        seriesNames: ["总市值"],
         format: "integer",
       },
       {
@@ -104,11 +104,10 @@ const REMOTE_CHART_SOURCES = [
     ],
     seriesDefinitions: [
       {
-        name: "总收益",
-        candidates: ["总收益"],
+        name: "总市值",
+        candidates: ["总市值"],
         defaultVisible: true,
         valueFormat: "number",
-        derive: { type: "subtract", left: "总市值", right: "总成本" },
         style: { color: "#b2bec3", type: "area" },
       },
       { name: "收益率", candidates: ["收益率"], defaultVisible: true, valueFormat: "percent", style: { color: "#d63031", type: "line" } },
